@@ -19,6 +19,7 @@ class Wavefront():
             print("Pupil is a dictionary and must have a 'type' keyword")
             raise UserWarning
         if ptype == "annulus":
+            self.pupil = ot.utils.circle(self.sz, pupil['dout']/self.m_per_pix) - ot.utils.circle(self.sz, pupil['din']/self.m_per_pix)
         
         else:
             print("Invalid pupil 'type' keyword!")
@@ -31,3 +32,8 @@ class Wavefront():
         """Add a propagator to the list of propagators"""
         self.propagators.append(ot.FresnelPropagator(self.sz,self.m_per_pix,distance*magnification**2, self.wave))
         
+    def propagate(self, index):
+        if len(self.propagators) <= index:
+            print("ERRROR: index out of range")
+            raise UserWarning
+        self.field = self.propagators[index].propagate(self.field)

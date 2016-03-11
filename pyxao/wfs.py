@@ -16,19 +16,19 @@ class WFS():
         if self.mask():
             return np.angle(wavefront[pix_to_use])*self.waves[0]/2/np.pi
         else:
-            return np.angle(wavefront)*self.lambda/2/np.pi
+            return np.angle(wavefront)*self.waves[0]/2/np.pi
 
 class APNLWFS(WFS):
     """The Asymmetric Pupil Non-Linear Wavefront Sensor"""
     def __init__(self,masks=None,pupil=None,m_pix=None,pscale=None,wave=[1e-6],sz=256,diam=25.448):
-    """ Initialization can occur with a range of different options.
+        """ Initialization can occur with a range of different options.
     
-    Parameters
-    ----------
-    m_pix: float array
-        An array of meters per pixel values. There should be one per wavelength, and
-        they should be proportional to wavelength.
-    """
+        Parameters
+        ----------
+        m_pix: float array
+            An array of meters per pixel values. There should be one per wavelength, and
+            they should be proportional to wavelength.
+        """
         if not m_pix:
             #Default to a diversity mask
             try:

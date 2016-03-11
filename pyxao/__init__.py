@@ -1,6 +1,6 @@
 from __future__ import division, print_function
 
-import wfs
-import atmosphere
-import wavefront
-import deformable_mirror
+from wfs import *
+from atmosphere import *
+from wavefront import *
+from deformable_mirror import *
