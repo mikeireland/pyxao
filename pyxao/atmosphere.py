@@ -3,48 +3,57 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import scipy.ndimage as nd
 import pdb
-plt.ion()
 
 class Atmosphere():
     """This is the atmosphere class. """
-    def __init__(self,sz = 512, m_per_pix=0.005,layers={'elevations':[10e3,0],'v_wind':[20,5],'r_0':[0.1,.1]},waves=[.5e-6]):
-        """
+    def __init__(self,sz = 1024, m_per_pix=0.02,elevations=[10e3,5e3,0],v_wind=[20,10,5],r_0=[.2,.2,.2],angle_wind=[.1,.1,.1],airmass=1.0):
+        """A model of the atmosphere, including a fixed phase screen. Note that the atmosphere has no knowledge
+        of wavelength - it is the wavefronts that contain the monochromatic wavefront propagators.
+        
         r_0: Defined at 0.5 microns.
         """
         wave_ref = .5e-6 #reference for r_0
-        self.layers=layers
+        self.nlayers=len(r_0)
         self.sz=sz
         self.m_per_pix=m_per_pix
-        self.waves=waves
-        self.phasescreens=[]
-        for r_0 in layers['r_0']: #One wavelength only! Set to 0.5 microns!!!
-            self.phasescreens.append(ot.kmf(sz) * np.sqrt(6.88*(m_per_pix/r_0)**(5.0/3.0)) * wave_ref/waves[0])
+        self.angle_wind = angle_wind
+        self.time=0
+        
+        #Sanity check inputs
+        if ( (len(elevations) != len(v_wind)) |
+            (len(v_wind) != len(r_0)) |
+            (len(r_0) != len(angle_wind)) ):
+            print("ERROR: elevations, v_wind, r_0 and angle_wind must all be the same length")
+            raise UserWarning 
+        
+        #Correct layers for airmass
+        elevations = np.append(elevations,0)
+        self.dz = (elevations[1:]-elevations[:-1])*airmass
+        self.r_0 = np.array(r_0)/airmass
+        self.v_wind = np.array(v_wind)/airmass
+        
+        #Delays in meters at time=0
+        self.delays0 = np.empty( (len(r_0),sz,sz) )
+        for i in range(self.nlayers): 
+            self.delays0[i] = ot.kmf(sz) * np.sqrt(6.88*(m_per_pix/r_0[i])**(5.0/3.0)) * wave_ref / 2 / np.pi
+        
+        #Delays in meters at another time.
+        self.delays  = self.delays0.copy()
             
-        #Create the propagators
-        self.propagators = []
-        el = layers['elevations']
-        for i in range(len(el) - 1):
-            #Propagate between two layers, one pair of layers at a time.
-            self.propagators.append(ot.FresnelPropagator(self.sz,self.m_per_pix, el[i] - el[i+1],self.waves[0]))
         
+    def evolve(self, time=0):
+        """Evolve the atmosphere to a new time"""
+        for i in range(self.nlayers):
+            yshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.sin(self.angle_wind[i])
+            xshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.cos(self.angle_wind[i])
+            self.delays[i] = nd.interpolation.shift(self.delays0[i],(yshift_in_pix,xshift_in_pix),order=1,mode='wrap')
         
-    def pupil_field(self,time=0):
-        """Find the electric field at the telescope pupil"""
-        
-        #!!! NB no interpolation here yet. Does this matter?
-        yshift_in_pix = int(self.layers['v_wind'][0]*time/self.m_per_pix)
-        field =    np.exp(2j*np.pi*np.roll(self.phasescreens[0], yshift_in_pix,axis=0))
-        for i in range(1,len(self.phasescreens)):
-            field = self.propagators[i-1].propagate(field)
-            yshift_in_pix = int(self.layers['v_wind'][i]*time/self.m_per_pix)
-            field *= np.exp(1j*np.roll(self.phasescreens[i],yshift_in_pix,axis=0))
-        return field   
-        
-    def propagate_to_ground(self,dz=2e2,nprop=50):
-        """Show a pretty movie of the full wavefront being propagated to ground level"""
-        prop = ot.FresnelPropagator(self.sz,self.m_per_pix, dz,self.waves[0])
-        field = np.exp(1j*self.phasescreens[0])
+    def propagate_to_ground(self,wave,dz=2e2,nprop=50):
+        """DEMO: Show a pretty movie of the full wavefront being propagated to ground level."""
+        prop = ot.FresnelPropagator(self.sz,self.m_per_pix, dz,wave)
+        field = np.exp(2j*np.pi*self.phasescreens[0]/wave)
         for i in range(nprop):
             field = prop.propagate(field)
             plt.clf()
@@ -55,15 +64,3 @@ class Atmosphere():
             plt.draw()
             
         
-        
-# Atmosphere.dx
-# Atmosphere.layers["v_wind"]
-# Atmosphere.layers["theta_wind"]
-# Atmosphere.layers["r_0"]
-# Atmosphere.layers["lambda_ref"]
-# Atmosphere.layers["evolution_time"]
-# Atmosphere.layers["evolution_type"] 
-# Atmosphere.apply(wavefront, dt, lambda)
-# 
-# #For GMT: A special function that takes out some fraction of piston, leaving the rest behind.
-# Atmosphere.apply(wavefront,dt, lambda) 

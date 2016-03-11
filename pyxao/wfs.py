@@ -3,7 +3,6 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import pdb
-plt.ion()
 
 class WFS():
     """This is a base wavefront sensor class. It is the most abstract perfect wavefront
