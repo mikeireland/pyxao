@@ -50,7 +50,7 @@ class Atmosphere():
             xshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.cos(self.angle_wind[i])
             self.delays[i] = nd.interpolation.shift(self.delays0[i],(yshift_in_pix,xshift_in_pix),order=1,mode='wrap')
         
-    def propagate_to_ground(self,wave,dz=2e2,nprop=50):
+    def propagate_to_ground(self,wave=1e-6,dz=2e2,nprop=50):
         """DEMO: Show a pretty movie of the full wavefront being propagated to ground level."""
         prop = ot.FresnelPropagator(self.sz,self.m_per_pix, dz,wave)
         field = np.exp(2j*np.pi*self.phasescreens[0]/wave)
