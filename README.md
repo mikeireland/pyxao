@@ -16,7 +16,7 @@ silly to be creating a new code here. However, none seem to be extensible easily
 these needs. The codes I've found are:
 
 a: COMPASS (http://compass.lesia.obspm.fr). This doesn't seem to be publicly available
-(an email didn't go anywhere) and much of this documentation is in French. It also 
+ and much of this documentation is in French. It also 
 appears very complex.
 
 b: OOMAO (https://github.com/rconan/OOMAO). No longer actively supported (see CEO) but 
