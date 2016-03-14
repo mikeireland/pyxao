@@ -8,6 +8,7 @@ from wfs import *
 from atmosphere import *
 from wavefront import *
 from deformable_mirror import *
+from ao_system import *
 
 #These below should go in a demo program...
 

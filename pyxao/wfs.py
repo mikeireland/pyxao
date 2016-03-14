@@ -4,36 +4,37 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pdb
 import scipy.ndimage as nd
-plt.ion()
 
 class WFS():
-    """This is a base wavefront sensor class. It is the most abstract perfect wavefront
+    """This is a base wavefront sensor class. 
+    
+    It is the most abstract perfect wavefront
     sensor, that returns the phase of the wavefront possibly within a mask. """
-    def __init__(self,waves=[1e-6],mask=None):
-        self.waves=waves
+    def __init__(self,wavefronts=[],mask=None):
+        self.waves=[w.wave for w in wavefronts]
         self.mask=mask
         self.pix_to_use=np.where(mask)
-    def sense(self,wavefront):
+    def sense(self):
         if self.mask():
-            return np.angle(wavefront[pix_to_use])*self.waves[0]/2/np.pi
+            return np.angle(wavefronts[0][pix_to_use])*self.waves[0]/2/np.pi
         else:
-            return np.angle(wavefront)*self.waves[0]/2/np.pi
+            return np.angle(wavefronts[0])*self.waves[0]/2/np.pi
 
 class ShackHartmann(WFS):
-    """A Shack-Hartmann wavefront sensor"""
+    """A Shack-Hartmann wavefront sensor
+            
+    All lenslets that have their center within the pupil are included.
+    
+    Parameters
+    ----------
+    sampling: float
+        wavefront sensor sampling as a multiple of nyquist
+    weights: float array
+        optional weighting of wavelengths.
+    """
     def __init__(self,mask=None,geometry='hexagonal',wavefronts=[],central_lenslet=True,
         lenslet_pitch=0.5,sampling=1.0,plotit=False,weights=None):
-        """Initialise the wavefront sensor.
         
-        All lenslets that have their center within the pupil are included.
-        
-        Parameters
-        ----------
-        sampling: float
-            wavefront sensor sampling as a multiple of nyquist
-        weights: float array
-            optional weighting of wavelengths.
-        """
         if len(wavefronts)==0:
             print("ERROR: Must initialise the ShackHartmann with a wavefront list")
             raise UserWarning
@@ -46,7 +47,7 @@ class ShackHartmann(WFS):
         lw = lenslet_pitch/wavefronts[0].m_per_pix
         nlenslets = int(np.floor(wavefronts[0].sz/lw))
         if geometry == 'hexagonal':
-             nrows = np.floor(nlenslets / np.sqrt(3) )
+             nrows = np.int(np.floor(nlenslets / np.sqrt(3)/2))*2+1 #always odd
              xpx = np.tile(wavefronts[0].sz//2 + (np.arange(nlenslets) - nlenslets//2)*lw,nrows)
              xpx = np.append(xpx,np.tile(wavefronts[0].sz//2 - lw/2 + (np.arange(nlenslets) - nlenslets//2)*lw,nrows-1))
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nlenslets)
@@ -83,6 +84,7 @@ class ShackHartmann(WFS):
         self.waves = []
         self.propagator_ixs = []
         self.nlenslets = px.shape[0]
+        self.nsense = 3*self.nlenslets #x, y and flux
         flength_trial = []
         for wf in wavefronts:
             #Compute focal length.
@@ -116,21 +118,52 @@ class ShackHartmann(WFS):
             nonzero = np.abs(pupil) > 0
             pupil[nonzero] /= np.abs(pupil)[nonzero]
             self.pupils.append(pupil)
+        #Create a perfect set of WFS outputs.
+        for wf in wavefronts:
+            wf.field=wf.pupil
+        self.sense_perfect = self.sense(subtract_perfect=False)
             
-    def sense(self,mode='gauss_weighted',window_hw=5, window_fwhm=7.0):
+    def sense(self,mode='gauss_weighted',window_hw=5, window_fwhm=5.0, nphot=None, 
+        rnoise=1.5,dclamp=10,subtract_perfect=True):
         """Sense the tilt and flux modes.
         
         Parameters
         ----------
+        nphot: float
+        rnoise: float
         mode: string
             NOT IMPLEMENTED YET
+        window_hw: int
+            Half-width of the window to extract the tilt and flux.
+        window_fwhm: float
+            Full-width half-maximum of the weighting window used to extract each
+            lenslet
+        rnoise: float
+            Readout noise in electrons.
+        dclamp: float
+            Denominator clamping value. Gain is reduced for subaperture fluxes below this
+            value.
+        subtract_perfect: boolean
+            Do we subtract the centroid offsets from a perfect (i.e. flat) wavefront?
+            
+        Returns
+        -------
+        sensors: (3,nlenslets) numpy array
+            An array of sensor positions and flux 
+            in pixel or normalised logarithmic flux units.
         """
         sz = self.wavefronts[0].sz
         self.im = np.zeros( (sz,sz) )
         for i in range(len(self.wavefronts)):
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
             self.wavefronts[i].propagate(self.propagator_ixs[i])
-            self.im += self.weights[i] + np.abs(self.wavefronts[i].field)**2
+            self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
+        
+        #If the photon number is set, then we add noise.
+        if nphot:
+            self.im = self.im/np.sum(self.im)*nphot
+            self.im = np.random.poisson(self.im).astype(float)
+            self.im += np.random.normal(scale=rnoise,size=self.im.shape)
         
         #Now sense the centroids.
         xx = np.arange(2*window_hw + 1) - window_hw
@@ -144,14 +177,25 @@ class ShackHartmann(WFS):
             subim = self.im[y_int-window_hw:y_int+window_hw+1,x_int-window_hw:x_int+window_hw+1]
             gg = np.exp(-((xy[0] - x_frac)**2 + (xy[1] - y_frac)**2)/2.0/window_fwhm*2.3548)
             xyf[2,i] = np.sum(subim*gg)
-            xyf[0,i] = np.sum((xy[0]-x_frac)*subim*gg)/xyf[2,i]
-            xyf[1,i] = np.sum((xy[1]-y_frac)*subim*gg)/xyf[2,i]
+            if nphot:
+                denom = np.maximum(xyf[2,i],dclamp)
+            else:
+                denom = xyf[2,i]
+            xyf[0,i] = np.sum((xy[0]-x_frac)*subim*gg)/denom
+            xyf[1,i] = np.sum((xy[1]-y_frac)*subim*gg)/denom
         
         #The flux variable only has any meaning with respect to the mean. 
         #A logarithm should also be taken so that differences to a perfect image
         #are meaningful.
-        xyf[2] /= np.mean(xyf[2])
+        if nphot:
+            denom = np.maximum(np.mean(xyf[2]),dclamp)
+        else:
+            denom = np.mean(xyf[2])
+        xyf[2] /= denom
         xyf[2] = np.log(xyf[2])
+        
+        if subtract_perfect:
+            xyf -= self.sense_perfect
         
         return xyf
 

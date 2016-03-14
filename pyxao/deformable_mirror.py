@@ -4,15 +4,32 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
 import pdb
-plt.ion()
 
 class DeformableMirror():
-    """This is the deformable mirror class. """
+    """A deformable mirror.
+ 
+    The geometry of this class has a lot in common with the ShackHartmann class
+
+    Parameters
+    ----------
+    influence_function: string
+        Type of influence function of each actuator.
+    wavefronts: list of Wavefront instances
+    central_actuator: boolean
+        Is there an actuator at the pupil center? If not, offset by half an actuator.
+    plotit: boolean
+        Do we make pretty plots?
+    actuator_pitch: float
+        Separation between actuators in m
+    geometry: string
+        Actuator geometry. 'hexagonal' or 'square'
+    edge_radius: float
+        Do we count actuators beyond the edge? Yes is they are within 
+        edge_radius * (actuator_pitch/2) of an illuminated part of the pupil."""
+        
     def __init__(self,influence_function='gaussian',wavefronts=[],central_actuator=False,\
         plotit=False,actuator_pitch=0.5,geometry='hexagonal',edge_radius=1.4):
-        """ The geometry of this class has a lot in common with the ShackHartmann class
-        """
-        
+
         if len(wavefronts)==0:
             print("ERROR: Must initialise the DeformableMirror with a wavefront list")
             raise UserWarning
@@ -27,7 +44,7 @@ class DeformableMirror():
         lw = actuator_pitch/wavefronts[0].m_per_pix
         nactuators = int(np.floor(wavefronts[0].sz/lw))
         if geometry == 'hexagonal':
-             nrows = np.floor(nactuators / np.sqrt(3) )
+             nrows = np.int(np.floor(nlenslets / np.sqrt(3)/2))*2+1 #Always odd
              xpx = np.tile(wavefronts[0].sz//2 + (np.arange(nactuators) - nactuators//2)*lw,nrows)
              xpx = np.append(xpx,np.tile(wavefronts[0].sz//2 - lw/2 + (np.arange(nactuators) - nactuators//2)*lw,nrows-1))
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nactuators)
@@ -54,7 +71,6 @@ class DeformableMirror():
                 (p[1]-wavefronts[0].sz//2,p[0]-wavefronts[0].sz//2),order=1))
             good.append(np.sum(overlap)>0)
         good = np.array(good)
-        #pdb.set_trace()
         px = px[good]
         self.px=px
         if plotit:
@@ -63,7 +79,13 @@ class DeformableMirror():
         self.nactuators = px.shape[0]
         
     def apply(self,actuators):
-        """Go through all wavefronts and apply this DM"""
+        """Go through all wavefronts and apply this DM
+        
+        Parameters
+        ----------
+        actuators: array-like
+            Actuator positions in m.
+        """
         if len(actuators) != len(self.px):
             print("ERROR: Wrong number of actuator values - should be {0:d}".format(len(self.px)))
             raise UserWarning

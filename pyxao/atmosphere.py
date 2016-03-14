@@ -7,13 +7,31 @@ import scipy.ndimage as nd
 import pdb
 
 class Atmosphere():
-    """This is the atmosphere class. """
+    """A model of the atmosphere, including a fixed phase screen. 
+    
+    Note that the atmosphere has no knowledge
+    of wavelength - it is the wavefronts that contain the monochromatic wavefront propagators.
+    
+    Parameters
+    ----------
+    sz: int
+        Size of the atmosphere. NB should be *at least* 2 times larger than the 
+        wavefront sensor size.
+    m_per_pix: float
+        meters per pixel in the atmosphere. Must be the same as wavefronts - there is
+        a !!!problem!!! with the code that this has to be set in both classes.
+    elevations: list of floats
+        Elevations of the turbulent layers in m
+    v_wind: list of floats
+        Velocities of the layers in m/s
+    angle_wind: list of floats
+        Angle of the wind directions in radians.
+    airmass: float
+        Airmass of observation (i.e. secant of zenith distance)
+    r_0: list of floats
+        Fried coherence lengths defined at 0.5 microns for each layer
+    """
     def __init__(self,sz = 1024, m_per_pix=0.02,elevations=[10e3,5e3,0],v_wind=[20,10,5],r_0=[.2,.2,.2],angle_wind=[.1,.1,.1],airmass=1.0):
-        """A model of the atmosphere, including a fixed phase screen. Note that the atmosphere has no knowledge
-        of wavelength - it is the wavefronts that contain the monochromatic wavefront propagators.
-        
-        r_0: Defined at 0.5 microns.
-        """
         wave_ref = .5e-6 #reference for r_0
         self.nlayers=len(r_0)
         self.sz=sz
@@ -44,7 +62,12 @@ class Atmosphere():
             
         
     def evolve(self, time=0):
-        """Evolve the atmosphere to a new time"""
+        """Evolve the atmosphere to a new time
+        
+        Parameters
+        ----------
+        time: float
+            Time at which to evolve the atmosphere (seconds)"""
         for i in range(self.nlayers):
             yshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.sin(self.angle_wind[i])
             xshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.cos(self.angle_wind[i])
