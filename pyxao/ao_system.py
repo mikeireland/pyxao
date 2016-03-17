@@ -36,7 +36,7 @@ class SCFeedBackAO():
         dm_poke_scale=1e-7):
         
         if not image_ixs:
-            image_ixs = range(len(dm.wavefronts),len(wfs.wavefronts))
+            image_ixs = range(len(wfs.wavefronts),len(dm.wavefronts))
         if conjugate_location != 0:
             print("OOPS: Not implemented yet - only ground layer conugation so far")
             raise UserWarning
@@ -161,6 +161,11 @@ class SCFeedBackAO():
         actuators_current = np.zeros(self.dm.nactuators)
         sz = self.dm.wavefronts[-1].sz
         im_mn = np.zeros( (2*sz,2*sz) )
+        nims = 0
+        im_perfect = np.zeros( (sz*2,sz*2) )
+        for ix in self.image_ixs:
+            self.dm.wavefronts[ix].field = self.dm.wavefronts[ix].pupil
+            im_perfect += self.dm.wavefronts[ix].image()
         for i in range(niter):
             self.dm.wavefronts[0].atm.evolve(dt*i)
             #Create the pupil fields.
@@ -180,24 +185,27 @@ class SCFeedBackAO():
             im_science = np.zeros( (sz*2,sz*2) )
             for ix in self.image_ixs:
                 im_science += self.dm.wavefronts[ix].image()
-            im_mn += im_science 
+            if (i != 0):
+                im_mn += im_science 
+                nims += 1
             
             #Plot stuff if we want.
             if plotit & ((i % 10)==0):
                 plt.clf()
-                plt.subplot(311)
+                plt.subplot(131)
                 plt.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
                 plt.plot(self.wfs.px[:,0], self.wfs.px[:,1],'x')
                 plt.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
                 plt.title('WFS')
-                plt.subplot(312)
+                plt.subplot(132)
                 plt.imshow(np.angle(corrected_field)*self.dm.wavefronts[0].pupil,interpolation='nearest')
                 plt.title('Corrected Phase')
-                plt.subplot(313)
+                plt.subplot(133)
                 plt.imshow(im_science[sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
                 plt.title('Science Image')
                 plt.draw()
                 #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in actuators_current]))
+        im_mn /= nims
         
-        return im_mn
+        return im_mn, im_perfect
         
