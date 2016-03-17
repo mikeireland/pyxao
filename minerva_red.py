@@ -48,6 +48,6 @@ im_mn, im_perfect = aos.run_loop(plotit=True,niter=260,dodgy_damping=0.95,gain=1
 strehl = np.max(ot.utils.regrid_fft(im_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(im_perfect,(1024,1024)))
 
 sz = im_mn.shape[0]
-#plt.clf()
-#plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
+plt.clf()
+plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
 print("Strehl: {0:6.3f}".format(strehl))
