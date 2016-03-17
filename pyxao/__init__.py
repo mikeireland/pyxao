@@ -24,7 +24,7 @@ def show_seeing(dt=0.02,nt=51,wave=1e-6):
         tic1=time.time()
         atm.evolve(dt*i)
         tic2=time.time()
-        wf.pupil_field(atm)
+        wf.pupil_field()
         tic3=time.time()
         im = wf.image()
         tic4=time.time()
