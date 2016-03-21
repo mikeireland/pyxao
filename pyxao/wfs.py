@@ -103,7 +103,7 @@ class ShackHartmann(WFS):
             if geometry == 'hexagonal':
                 one_lenslet *= ot.utils.hexagon(wf.sz,lw)
             elif geometry == 'square':
-                one_lenslet *= ot.utils.hexagon(wf.sz,lw)
+                one_lenslet *= ot.utils.square(wf.sz,lw)
             else:
                 print("ERROR: invalid wavefront sensor geometry")
                 raise UserWarning
