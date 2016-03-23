@@ -32,16 +32,22 @@ class SCFeedBackAO():
     dm_poke_scale: float
         A normalisation for poking the deformable mirror, used in response matrix
         sensing and the loop. Should be well within the linear regime."""
+
     def __init__(self,dm,wfs,conjugate_location=0.0,image_ixs=None,
+        # A normalisation for poking the deformable mirror, used in response matrix sensing and the loop. 
+        # Should be well within the linear regime.
         dm_poke_scale=1e-7):
         
+        # A list of indexes for which images should be calculated, i.e. the science wavefront indices from the dm instance.
         if not image_ixs:
             image_ixs = range(len(dm.wavefronts),len(wfs.wavefronts))
         if conjugate_location != 0:
             print("OOPS: Not implemented yet - only ground layer conugation so far")
             raise UserWarning
             
+        # location of WFS and DM conjugate
         self.conjugate_location=conjugate_location
+        
         self.image_ixs = image_ixs
         self.wavefronts = dm.wavefronts
         self.dm = dm
@@ -54,24 +60,35 @@ class SCFeedBackAO():
         """Poke the actuators and record the WFS output"""
         self.response_matrix = np.empty( (self.dm.nactuators,self.wfs.nsense) )
         if mode=='onebyone':
+            # We poke each actuator twice (once +ve, once -ve) and take the abs. mean WFS response
             for i in range(self.dm.nactuators):
+                
                 #Flatten the WFS wavefronts
                 for wf in self.wfs.wavefronts:
                     wf.field=wf.pupil
-                act = np.zeros(self.dm.nactuators)
+                
+                # Poking an actuator in the +ve direction.
+                act = np.zeros(self.dm.nactuators)                
                 act[i] = self.dm_poke_scale
                 self.dm.apply(act)
                 wfs_plus = self.wfs.sense() 
+                
+                #Flatten the WFS wavefronts
                 for wf in self.wfs.wavefronts:
                     wf.field=wf.pupil
+
+                # Poking an actuator in the -ve direction.
                 act = np.zeros(self.dm.nactuators)
                 act[i] = -self.dm_poke_scale
                 self.dm.apply(act)
                 wfs_minus = self.wfs.sense() 
+
                 #Check that poking in both directions is equivalent!
                 if (np.sum(wfs_plus*wfs_minus)/np.sum(wfs_plus*wfs_plus) > -0.9):
                     print("WARNING: Poking the DM is assymetric!!!")
                     pdb.set_trace()
+
+                # Taking the mean response value.
                 self.response_matrix[i] = 0.5*(wfs_plus - wfs_minus).flatten()
         else:
             print("ERROR: invalid response matrix mode")

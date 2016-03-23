@@ -34,6 +34,7 @@ class Wavefront():
         size of the wavefront
     pupil: dict
         Pupil type and parameters."""
+    #TODO change the argument order...
     def __init__(self,wave=1.65e-6,m_per_pix=0.02,sz=512,pupil={'type':"annulus", 'dout':8.0,'din':3.0}):
         self.wave=wave
         self.m_per_pix = m_per_pix
@@ -50,8 +51,10 @@ class Wavefront():
             print("Invalid pupil 'type' keyword!")
         #Initialize an empty list of propagators
         self.propagators = []
-        #Initialize the wavefront field
+        #Initialize the wavefront field: uniform (1 + j) at all points
         self.field = (1+0j)*np.ones( (sz,sz) )
+        # Index of the propagator list corresponding to the atmosphere
+        # (zero since there's no atmosphere yet)
         self.atmosphere_start = 0
         self.atm=None
         
@@ -107,6 +110,8 @@ class Wavefront():
         """Find the electric field at the telescope pupil, and place it in the field
         variable. It is assumed that the atmosphere is loaded into the first of 
         the propagators for this wavefront.
+
+        NOTE: Fresnel propagation!
         
         Parameters
         ----------
@@ -130,6 +135,7 @@ class Wavefront():
             #tic = time.time()
             self.field *= np.exp(2j*np.pi*atm.delays[i][:self.sz,:self.sz]/self.wave)
             #Smooth the edges
+            #pdb.set_trace()
             self.field[:edge_smooth,:] = 1 + (self.field[:edge_smooth,:]-1)* \
                 np.repeat(np.arange(edge_smooth)/edge_smooth,self.sz).reshape(edge_smooth,self.sz)
             self.field[-edge_smooth:,:] = 1 + (self.field[-edge_smooth:,:]-1)* \
@@ -139,12 +145,13 @@ class Wavefront():
             self.field[:,-edge_smooth:] = 1 + (self.field[:,-edge_smooth:]-1)* \
                 np.tile(np.arange(edge_smooth)[::-1]/edge_smooth,self.sz).reshape(self.sz,edge_smooth)
             #toc = time.time()
-            #Propagate to the next location
+            #Fresnel propagate to the next location
             self.field = self.propagators[i+self.atmosphere_start].propagate(self.field)
             #print("t1: {0:6.3f}, t2 {1:6.3f}".format(toc-tic, time.time()-toc))
         self.field *= self.pupil 
         
     def image(self, return_efield=False):
+        # AZ: Huygens propagation?
         """Return an image based on the current field. 
         
         Zero-pad in order to ensure nyquist sampling. Note that this is currently 
@@ -158,11 +165,13 @@ class Wavefront():
             Do we return an electric field? If not, return the intensity."""
         zpad = np.zeros( (self.sz*2,self.sz*2),dtype=np.complex)
         zpad[:self.sz,:self.sz]=self.field
+        # Centering the field 
         zpad = np.roll(np.roll(zpad,-self.sz//2,axis=1),-self.sz//2,axis=0)
         if (nthreads==0):
             efield = np.fft.fft2(zpad)
         else:
             efield = pyfftw.interfaces.numpy_fft.fft2(zpad,threads=nthreads)
+        # Shift the zero-frequency component to the center of the spectrum.
         efield = np.fft.fftshift(efield)
         if return_efield:
             return efield

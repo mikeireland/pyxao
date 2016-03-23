@@ -5,20 +5,26 @@ import matplotlib.pyplot as plt
 import pdb
 import scipy.ndimage as nd
 
+# Base WFS class.
+# 'ideal & perfect' WFS which simply returns the phase of the wavefront.
+# A mask can be used if desired.
 class WFS():
     """This is a base wavefront sensor class. 
     
     It is the most abstract perfect wavefront
     sensor, that returns the phase of the wavefront possibly within a mask. """
+
     def __init__(self,wavefronts=[],mask=None):
+        self.wavefronts = wavefronts  # AZ
         self.waves=[w.wave for w in wavefronts]
         self.mask=mask
         self.pix_to_use=np.where(mask)
+
     def sense(self):
-        if self.mask():
-            return np.angle(wavefronts[0][pix_to_use])*self.waves[0]/2/np.pi
+        if self.mask != None:   # AZ 
+            return np.angle(self.wavefronts[0].field)*self.waves[0]/2/np.pi * self.mask
         else:
-            return np.angle(wavefronts[0])*self.waves[0]/2/np.pi
+            return np.angle(self.wavefronts[0].field)*self.waves[0]/2/np.pi
 
 class ShackHartmann(WFS):
     """A Shack-Hartmann wavefront sensor
@@ -32,8 +38,17 @@ class ShackHartmann(WFS):
     weights: float array
         optional weighting of wavelengths.
     """
-    def __init__(self,mask=None,geometry='hexagonal',wavefronts=[],central_lenslet=True,
-        lenslet_pitch=0.5,sampling=1.0,plotit=False,weights=None):
+    def __init__(
+        self,
+        mask=None,
+        geometry='hexagonal',
+        wavefronts=[],
+        central_lenslet=True,
+        lenslet_pitch=0.5,
+        sampling=1.0,
+        plotit=False,
+        weights=None
+        ):
         
         if len(wavefronts)==0:
             print("ERROR: Must initialise the ShackHartmann with a wavefront list")
@@ -44,8 +59,11 @@ class ShackHartmann(WFS):
         #Create lenslet geometry
         xpx = []
         ypx = []
+        # pixels per subaperture
         lw = lenslet_pitch/wavefronts[0].m_per_pix
         nlenslets = int(np.floor(wavefronts[0].sz/lw))
+
+        # Hexagonal geometry
         if geometry == 'hexagonal':
              nrows = np.int(np.floor(nlenslets / np.sqrt(3)/2))*2+1 #always odd
              xpx = np.tile(wavefronts[0].sz//2 + (np.arange(nlenslets) - nlenslets//2)*lw,nrows)
@@ -55,7 +73,8 @@ class ShackHartmann(WFS):
              if not central_lenslet:
                 xpx += lw/2
                 ypx += lw*np.sqrt(3)/4
-                
+
+        # Square geometry        
         elif geometry == 'square':
             xpx = np.tile(   wavefronts[0].sz//2 + (np.arange(nlenslets) - nlenslets//2)*lw,nlenslets)
             ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nlenslets) - nlenslets//2)*lw,nlenslets)
@@ -64,7 +83,8 @@ class ShackHartmann(WFS):
                 ypx += lw/2
         else:
             print("ERROR: invalid wavefront sensor geometry")
-            raise UserWarning    
+            raise UserWarning
+
         #Find pixel values in pupil only.
         px = np.array( [xpx,ypx]).T
         good = np.array([wavefronts[0].pupil[int(np.round(p[1])),int(np.round(p[0]))] != 0 for p in px])
@@ -84,30 +104,46 @@ class ShackHartmann(WFS):
         self.waves = []
         self.propagator_ixs = []
         self.nlenslets = px.shape[0]
+        # Total number of measurements taken from the wFS
         self.nsense = 3*self.nlenslets #x, y and flux
         flength_trial = []
+        # Calculate the focal length at each wavelength
         for wf in wavefronts:
-            #Compute focal length.
+            # Compute focal length for the SH WFS
+            # D = lenslet pitch (diameter of each lenslet)
+            # f# = f/D, here we assume that f = 1 so f# = 1/D
+            # resolution = wave/D
+            # Each pixel is sampled at Nyquist sampling rate so 1 resolution element = 2 pixels
+            # therefore 2 resolution elements =  wave / D
+            # therefore 1/D = wave/D/wave = 2 resolution elements/wave, hence the line below
+            # Add sampling in here???
             fratio = 2*wf.m_per_pix/wf.wave
+            # now we can recover the focal length from the pitch (diameter) and the f#
             flength_trial.append(fratio*lenslet_pitch)
+        # find the maximum focal length corresponding to all wavelengths
         flength = np.max(flength_trial)
+
         self.flength=flength
         self.pupils=[]
         for wf in wavefronts:
             self.waves.append(wf.wave)
             self.propagator_ixs.append(len(wf.propagators))
             wf.add_propagator(flength)
-            #Now the tricky bit... make lots of hexagons!
+            # Now the tricky bit... make lots of hexagons!
+            # np.zeros returns an array of type dtype
             pupil = np.zeros( (wf.sz,wf.sz),dtype=np.complex)
+            # Make a curved wavefront corresponding to the wavefront over each subaperture.
             one_lenslet = ot.curved_wf(wf.sz,wf.m_per_pix,f_length=flength,wave=wf.wave)
+            # Maksing each wavefront to the shape of the subapertures.
             if geometry == 'hexagonal':
                 one_lenslet *= ot.utils.hexagon(wf.sz,lw)
-            elif geometry == 'square':
-                one_lenslet *= ot.utils.hexagon(wf.sz,lw)
+            elif geometry == 'square':  
+                one_lenslet *= ot.utils.square(wf.sz,lw)
             else:
                 print("ERROR: invalid wavefront sensor geometry")
                 raise UserWarning
-            
+
+            # Duplicating the wavefronts, one over each lenslet.
             for i in range(self.nlenslets):
                 #Shift doens't work on complex arrays, so we have to split into real and
                 #imaginary parts.
@@ -121,6 +157,7 @@ class ShackHartmann(WFS):
         #Create a perfect set of WFS outputs.
         for wf in wavefronts:
             wf.field=wf.pupil
+        # Get the wavefront sensed by the WFS.
         self.sense_perfect = self.sense(subtract_perfect=False)
             
     def sense(self,mode='gauss_weighted',window_hw=5, window_fwhm=5.0, nphot=None, 
@@ -154,10 +191,32 @@ class ShackHartmann(WFS):
         """
         sz = self.wavefronts[0].sz
         self.im = np.zeros( (sz,sz) )
+
+        # Compute the image appearing on the WFS detector.
         for i in range(len(self.wavefronts)):
+            plt.subplot(221)
+            plt.imshow(np.angle(self.wavefronts[i].field.real))
+            plt.title('Before propagation...')
+
+            # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
+            plt.subplot(222)
+            plt.imshow(np.angle(self.wavefronts[i].field.real))
+            plt.title('After multiplying by pupil mask...')
+
+            # Then propagate (Huygens propagation)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
+            plt.subplot(223)
+            plt.imshow(np.angle(self.wavefronts[i].field.real))
+            plt.title('After propagation...')
+
+            # Add the image component of that wavelength to the final image.
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
+            plt.subplot(224)
+            plt.imshow(self.im)
+            plt.title('WFS detector image...')
+            
+            pdb.set_trace()
         
         #If the photon number is set, then we add noise.
         if nphot:
@@ -165,10 +224,15 @@ class ShackHartmann(WFS):
             self.im = np.random.poisson(self.im).astype(float)
             self.im += np.random.normal(scale=rnoise,size=self.im.shape)
         
-        #Now sense the centroids.
+        # Now sense the centroids.
         xx = np.arange(2*window_hw + 1) - window_hw
         xy = np.meshgrid(xx,xx)
-        xyf = np.empty( (3,self.nlenslets) )
+        # make an uninitialized array:
+        #   xyf[0] = x coord
+        #   xyf[1] = y coord
+        #   xyf[2] = image sum (denominator)
+        xyf = np.empty( (3,self.nlenslets) )    
+
         for i in range(self.nlenslets):
             x_int  = int(np.round(self.px[i][0]))
             x_frac = self.px[i][0] - x_int
@@ -181,6 +245,7 @@ class ShackHartmann(WFS):
                 denom = np.maximum(xyf[2,i],dclamp)
             else:
                 denom = xyf[2,i]
+            # x and y coords of the centroids
             xyf[0,i] = np.sum((xy[0]-x_frac)*subim*gg)/denom
             xyf[1,i] = np.sum((xy[1]-y_frac)*subim*gg)/denom
         
@@ -191,6 +256,7 @@ class ShackHartmann(WFS):
             denom = np.maximum(np.mean(xyf[2]),dclamp)
         else:
             denom = np.mean(xyf[2])
+        # normalise the sum w.r.t. the mean value if no photon noise assumed
         xyf[2] /= denom
         xyf[2] = np.log(xyf[2])
         

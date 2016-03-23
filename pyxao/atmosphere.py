@@ -15,7 +15,7 @@ class Atmosphere():
     Parameters
     ----------
     sz: int
-        Size of the atmosphere. NB should be *at least* 2 times larger than the 
+        Size (per side) of the atmosphere. NB should be *at least* 2 times larger than the 
         wavefront sensor size.
     m_per_pix: float
         meters per pixel in the atmosphere. Must be the same as wavefronts - there is
@@ -38,7 +38,9 @@ class Atmosphere():
         self.m_per_pix=m_per_pix
         self.angle_wind = angle_wind
         self.time=0
-        
+        # self.elevations = elevations    # AZ
+        # self.airmass = airmass          # AZ
+
         #Sanity check inputs
         if ( (len(elevations) != len(v_wind)) |
             (len(v_wind) != len(r_0)) |
