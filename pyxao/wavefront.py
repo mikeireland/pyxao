@@ -108,8 +108,10 @@ class Wavefront():
             
     def pupil_field(self,edge_smooth=16):
         """Find the electric field at the telescope pupil, and place it in the field
-        variable. It is assumed that the atmosphere is loaded into the first of 
-        the propagators for this wavefront.
+        variable. 
+
+        It is assumed that the atmosphere is loaded into the atmosphere_start-th index
+        of the propagators for this wavefront.
 
         NOTE: Fresnel propagation!
         
