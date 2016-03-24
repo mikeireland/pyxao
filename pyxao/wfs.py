@@ -194,29 +194,27 @@ class ShackHartmann(WFS):
 
         # Compute the image appearing on the WFS detector.
         for i in range(len(self.wavefronts)):
-            plt.subplot(221)
-            plt.imshow(np.angle(self.wavefronts[i].field.real))
-            plt.title('Before propagation...')
+            # plt.subplot(221)
+            # plt.imshow(np.angle(self.wavefronts[i].field.real))
+            # plt.title('Before propagation...')
 
             # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
-            plt.subplot(222)
-            plt.imshow(np.angle(self.wavefronts[i].field.real))
-            plt.title('After multiplying by pupil mask...')
+            # plt.subplot(222)
+            # plt.imshow(np.angle(self.wavefronts[i].field.real))
+            # plt.title('After multiplying by pupil mask...')
 
             # Then propagate (Huygens propagation)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
-            plt.subplot(223)
-            plt.imshow(np.angle(self.wavefronts[i].field.real))
-            plt.title('After propagation...')
+            # plt.subplot(223)
+            # plt.imshow(np.angle(self.wavefronts[i].field.real))
+            # plt.title('After propagation...')
 
             # Add the image component of that wavelength to the final image.
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
-            plt.subplot(224)
-            plt.imshow(self.im)
-            plt.title('WFS detector image...')
-            
-            pdb.set_trace()
+            # plt.subplot(224)
+            # plt.imshow(self.im)
+            # plt.title('WFS detector image...')
         
         #If the photon number is set, then we add noise.
         if nphot:
@@ -238,13 +236,19 @@ class ShackHartmann(WFS):
             x_frac = self.px[i][0] - x_int
             y_int  = int(np.round(self.px[i][1]))
             y_frac = self.px[i][1] - y_int
+            
             subim = self.im[y_int-window_hw:y_int+window_hw+1,x_int-window_hw:x_int+window_hw+1]
+            
+            # Gaussian windowing
             gg = np.exp(-((xy[0] - x_frac)**2 + (xy[1] - y_frac)**2)/2.0/window_fwhm*2.3548)
+
+            # Sum of all pixel intensities in the subaperture (denominator of the centroid calc)
             xyf[2,i] = np.sum(subim*gg)
             if nphot:
                 denom = np.maximum(xyf[2,i],dclamp)
             else:
                 denom = xyf[2,i]
+            
             # x and y coords of the centroids
             xyf[0,i] = np.sum((xy[0]-x_frac)*subim*gg)/denom
             xyf[1,i] = np.sum((xy[1]-y_frac)*subim*gg)/denom
