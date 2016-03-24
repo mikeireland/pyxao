@@ -86,15 +86,15 @@ class DeformableMirror():
             plt.plot(px[:,0], px[:,1],'o')
         self.nactuators = px.shape[0]
         
-    def apply(self,actuators):
+    def apply(self,coefficients):
         """Go through all wavefronts and apply this DM
         
         Parameters
         ----------
-        actuators: array-like
+        coefficients: array-like
             Actuator positions (coefficients?) in m.
         """
-        if len(actuators) != len(self.px):
+        if len(coefficients) != len(self.px):
             print("ERROR: Wrong number of actuator values - should be {0:d}".format(len(self.px)))
             raise UserWarning
         sz = self.wavefronts[0].sz
@@ -113,7 +113,7 @@ class DeformableMirror():
         # Construct the phase perturbation induced by the DM surface.
         for i in range(len(self.px)):
             # Adde the contribution from each actuator together.
-            phasescreen += nd.interpolation.shift(gg,(self.px[i,1]-sz//2,self.px[i,0]-sz//2),order=1)*actuators[i]
+            phasescreen += nd.interpolation.shift(gg,(self.px[i,1]-sz//2,self.px[i,0]-sz//2),order=1)*coefficients[i]
 
         # Add the DM correction to the wavefronts.
         for wf in self.wavefronts:
