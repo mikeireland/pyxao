@@ -6,6 +6,7 @@ import pdb
 import scipy.ndimage as nd
 import scipy.linalg as la
 import matplotlib.cm as cm
+import time
 plt.ion()
 
 class SCFeedBackAO():
@@ -25,7 +26,7 @@ class SCFeedBackAO():
     dm: DeformableMirror instance
     wfs: WFS or child class instance
     conjugate_location: float
-        location of wfs and DM conguagate
+        location of wfs and DM conjugate
     image_ixs: list
         A list of indexes for which images should be calculated, i.e. the 
         science wavefront indices from the dm instance.
@@ -51,9 +52,7 @@ class SCFeedBackAO():
         self.image_ixs = image_ixs
         self.wavefronts = dm.wavefronts
         self.dm = dm
-        self.wfs = wfs
-        
-        
+        self.wfs = wfs        
         self.dm_poke_scale = dm_poke_scale
         
     def find_response_matrix(self,mode='onebyone',amplitude=1e-7):
@@ -70,8 +69,8 @@ class SCFeedBackAO():
                 # Poking an actuator in the +ve direction.
                 act = np.zeros(self.dm.nactuators)                
                 act[i] = self.dm_poke_scale
-                self.dm.apply(act)
-                wfs_plus = self.wfs.sense() 
+                self.dm.apply(act)          # Apply the poke to the wavefront, perturb its phase
+                wfs_plus = self.wfs.sense() # Get the corresonding WFS measurement
                 
                 #Flatten the WFS wavefronts
                 for wf in self.wfs.wavefronts:
@@ -117,38 +116,104 @@ class SCFeedBackAO():
             print("ERROR: reconstructor mode")
             raise UserWarning
             
-    def correct_twice(self):
+    def correct_twice(self,plotit=False):
         """Find the pupil field, then correct it twice.
         
         TEST method, but ERROR checking still needed!
         
         Returns
         -------
-        sensors: list
+        measurements: list
             A list of the sensor output for before correction, after 1 and after 2
             applications of the reconstructor
         ims: list
             A list of wavefront sensor images (before correction, after 1 and 2
             reconstructor applications)
         """
+        # Reset the distorted wavefront to that caused by the atmosphere and nothing else
+        for wf in self.wfs.wavefronts:
+            wf.pupil_field()    # Reset the pupil field
+            field0 = wf.field
+
+        # Sense the wavefront.
+        # wfs.sense() uses the field attribute of the wf to make a measurement.
+        measurements0 = self.wfs.sense() # WF measurements
+        im0 = self.wfs.im.copy()    # WFS image
+        # Calculate the DM coefficients corresponding to the measurements.
+        coefficients = -np.dot(self.reconstructor,measurements0.flatten())*self.dm_poke_scale
+        
+        # Reset the wavefront (since it gets modified by wfs.sense())
         for wf in self.wfs.wavefronts:
             wf.pupil_field()
-        #Sense the wavefront.
-        sensors0 = self.wfs.sense()
-        im0 = self.wfs.im.copy()
-        actuators = -np.dot(self.reconstructor,sensors0.flatten())*self.dm_poke_scale
-        for wf in self.wfs.wavefronts:
-            wf.pupil_field()
-        self.dm.apply(actuators)
-        sensors1 = self.wfs.sense()
+            field1 = wf.field
+        
+        # Apply a correction. This modifies (but does not reset) the 
+        # field attribute of wf:
+        #   wf.field = wf.field*np.exp(2j*np.pi*phasescreen/wf.wave)
+        # We have to reset the wavefront using
+        # pupil_field() before we call this because field is modified by
+        # wfs.sense() (gets masked with the lenslet pupils)
+        self.dm.apply(coefficients)
+        
+        # Sense after the first correction
+        measurements1 = self.wfs.sense()
         im1 = self.wfs.im.copy()
-        actuators += -np.dot(self.reconstructor,sensors1.flatten())*self.dm_poke_scale
+        coefficients += -np.dot(self.reconstructor,measurements1.flatten())*self.dm_poke_scale
+        
         for wf in self.wfs.wavefronts:
             wf.pupil_field()
-        self.dm.apply(actuators)
-        sensors2 = self.wfs.sense()
+            field2 = wf.field
+        
+        # Apply a second correction
+        # self.dm.apply(coefficients)
+        
+        # Sense after the second correction.
+        measurements2 = self.wfs.sense()
         im2 = self.wfs.im.copy()
-        return [sensors0,sensors1,sensors2],[im0,im1,im2] 
+
+        if plotit==True:
+            plt.figure()
+            plt.suptitle('WFS detector images')
+            plt.subplot(131)
+            plt.imshow(im0)
+            plt.title('Before sensing')
+            plt.subplot(132)
+            plt.imshow(im1)
+            plt.title('After first correction')
+            plt.subplot(133)
+            plt.imshow(im2)
+            plt.title('After second correction')
+
+            """
+            # Sanity check to see how the field changes between calls of 
+            # pupil_field(). (hint: it doesn't)
+
+            plt.subplot(131)
+            plt.imshow(field0.real)
+            plt.title('field0')
+            plt.subplot(132)
+            plt.imshow(field1.real)
+            plt.title('field1')
+            plt.subplot(133)
+            plt.imshow((field1-field0).real)
+            plt.title('field1-field0')
+            plt.colorbar()
+            """
+
+            """
+            plt.figure()
+            plt.suptitle('WFS detector image changes')
+            plt.subplot(121)
+            plt.imshow(im1-im0)
+            plt.title('im1 - im0')
+            plt.colorbar()
+            plt.subplot(122)
+            plt.imshow(im2-im1)
+            plt.title('im2 - im1')
+            plt.colorbar()
+            """
+
+        return [measurements0,measurements1,measurements2],[im0,im1,im2] 
         
     def run_loop(self,dt=0.002,nphot=1e4,mode='integrator',niter=1000,plotit=False,\
         gain=1.0,dodgy_damping=0.9):
@@ -175,32 +240,46 @@ class SCFeedBackAO():
             Due to Mike's lack of understanding of servo theory, damping the DM
             position to zero in the absence of WFS seems to help.
         """
-        actuators_current = np.zeros(self.dm.nactuators)
+        coefficients_current = np.zeros(self.dm.nactuators)
         sz = self.dm.wavefronts[-1].sz
         im_mn = np.zeros( (2*sz,2*sz) )
+
         for i in range(niter):
+            print('Iteration ', i)
+            # Evolve the atmosphere.
             self.dm.wavefronts[0].atm.evolve(dt*i)
-            #Create the pupil fields.
+            
+            # Reset the pupil fields.
             for wf in self.dm.wavefronts:
                 wf.pupil_field()
-            self.dm.apply(actuators_current)
             
-            #Save a copy of the corrected pupil phase
+            # Apply the wavefront correction.
+            self.dm.apply(coefficients_current)
+            
+            # Save a copy of the corrected pupil phase.
             corrected_field = self.dm.wavefronts[0].field.copy()
             
-            #Sense the wavefront
+            #Sense the corrected wavefront.
             sensors = self.wfs.sense(nphot=nphot)
-            actuators_current = dodgy_damping*actuators_current - \
-                gain*np.dot(self.reconstructor,sensors.flatten())*self.dm_poke_scale
             
-            #Create the image. By FFT for now...
+            # Apply control logic.
+            # pdb.set_trace()
+            if mode=='integrator':
+                coefficients_current = dodgy_damping*coefficients_current - gain*np.dot(self.reconstructor,sensors.flatten())*self.dm_poke_scale
+            else:
+                print('ERROR: invalid control loop mode! Use integrator for now...')
+                raise UserWarning
+
+            # Create the image. By FFT for now...
             im_science = np.zeros( (sz*2,sz*2) )
-            for ix in self.image_ixs:
+            for ix in range(self.image_ixs):
+                # Huygens propagation to generate the science image (i.e. FFT)
                 im_science += self.dm.wavefronts[ix].image()
             im_mn += im_science 
             
-            #Plot stuff if we want.
-            if plotit & ((i % 10)==0):
+            # Plot stuff if we want.
+            # if plotit & ((i % 10)==0):
+            if plotit:
                 plt.clf()
                 plt.subplot(311)
                 plt.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
@@ -214,7 +293,8 @@ class SCFeedBackAO():
                 plt.imshow(im_science[sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
                 plt.title('Science Image')
                 plt.draw()
-                #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in actuators_current]))
+                plt.pause(0.001)
+                #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in coefficients_current]))
         
         return im_mn
         
