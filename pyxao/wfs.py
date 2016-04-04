@@ -160,8 +160,13 @@ class ShackHartmann(WFS):
         # Get the wavefront sensed by the WFS.
         self.sense_perfect = self.sense(subtract_perfect=False)
             
-    def sense(self,mode='gauss_weighted',window_hw=5, window_fwhm=5.0, nphot=None, 
-        rnoise=1.5,dclamp=10,subtract_perfect=True):
+    def sense(self,mode='gauss_weighted',
+            window_hw=5, 
+            window_fwhm=5.0, 
+            nphot=None, 
+            rnoise=1.5,
+            dclamp=10,
+            subtract_perfect=True):
         """Sense the tilt and flux modes.
         
         Parameters
@@ -193,32 +198,15 @@ class ShackHartmann(WFS):
         self.im = np.zeros( (sz,sz) )
 
         # Compute the image appearing on the WFS detector.
-        # Note: this routine assumes that the detector is sensitive to all
-        # wavelengths in the vector of wavefronts given. 
         for i in range(len(self.wavefronts)):
-            # plt.subplot(221)
-            # plt.imshow(np.angle(self.wavefronts[i].field.real))
-            # plt.title('Before propagation...')
-
             # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
-            # plt.subplot(222)
-            # plt.imshow(np.angle(self.wavefronts[i].field.real))
-            # plt.title('After multiplying by pupil mask...')
-
             # Then propagate (Huygens propagation)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
-            # plt.subplot(223)
-            # plt.imshow(np.angle(self.wavefronts[i].field.real))
-            # plt.title('After propagation...')
-
             # Add the image component of that wavelength to the final image.
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
-            # plt.subplot(224)
-            # plt.imshow(self.im)
-            # plt.title('WFS detector image...')
         
-        #If the photon number is set, then we add noise.
+        # If the photon number is set, then we add noise.
         if nphot:
             self.im = self.im/np.sum(self.im)*nphot
             self.im = np.random.poisson(self.im).astype(float)
