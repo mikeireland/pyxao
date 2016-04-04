@@ -42,6 +42,13 @@ class SCFeedBackAO():
         # A list of indexes for which images should be calculated, i.e. the science wavefront indices from the dm instance.
         if not image_ixs:
             image_ixs = range(len(dm.wavefronts),len(wfs.wavefronts))
+        # AZ: make sure image_ixs is a list, even if only with one element
+        elif type(image_ixs) == int:
+            image_ixs = [image_ixs]
+        else:
+            print("OOPS: invalid type for image_ixs - must be of type list or int!")
+            raise UserWarning
+
         if conjugate_location != 0:
             print("OOPS: Not implemented yet - only ground layer conugation so far")
             raise UserWarning
@@ -215,7 +222,7 @@ class SCFeedBackAO():
 
         return [measurements0,measurements1,measurements2],[im0,im1,im2] 
         
-    def run_loop(self,dt=0.002,nphot=1e4,mode='integrator',niter=1000,plotit=False,\
+    def run_loop(self,dt=0.002,nphot=1e4,mode='integrator',niter=1000,nframesbetweenplots=10,plotit=False,\
         gain=1.0,dodgy_damping=0.9):
         """Run an AO servo loop.
         
@@ -226,7 +233,7 @@ class SCFeedBackAO():
         dt: float
             Time between samples
         nphot: float
-            Number of photons per frame
+            Number of photons per frame (noise)
         mode: string
             Servo loop mode. 'integrator' is a simple integrator.
         niter: int
@@ -245,7 +252,6 @@ class SCFeedBackAO():
         im_mn = np.zeros( (2*sz,2*sz) )
 
         for i in range(niter):
-            print('Iteration ', i)
             # Evolve the atmosphere.
             self.dm.wavefronts[0].atm.evolve(dt*i)
             
@@ -272,28 +278,33 @@ class SCFeedBackAO():
 
             # Create the image. By FFT for now...
             im_science = np.zeros( (sz*2,sz*2) )
-            for ix in range(self.image_ixs):
+
+            # AZ
+            # for ix in range(self.image_ixs):
+            for ix in self.image_ixs:
                 # Huygens propagation to generate the science image (i.e. FFT)
                 im_science += self.dm.wavefronts[ix].image()
             im_mn += im_science 
             
             # Plot stuff if we want.
-            # if plotit & ((i % 10)==0):
-            if plotit:
+            if plotit & ((i % nframesbetweenplots)==0):
                 plt.clf()
-                plt.subplot(311)
+                # Plot the WFS detector image
+                plt.subplot(131)
                 plt.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
-                plt.plot(self.wfs.px[:,0], self.wfs.px[:,1],'x')
+                # plt.plot(self.wfs.px[:,0], self.wfs.px[:,1],'x')
                 plt.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
                 plt.title('WFS')
-                plt.subplot(312)
+                # Plot the corrected phase 
+                plt.subplot(132)
                 plt.imshow(np.angle(corrected_field)*self.dm.wavefronts[0].pupil,interpolation='nearest')
                 plt.title('Corrected Phase')
-                plt.subplot(313)
+                # Plot the science image
+                plt.subplot(133)
                 plt.imshow(im_science[sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
                 plt.title('Science Image')
                 plt.draw()
-                plt.pause(0.001)
+                plt.pause(0.00001)
                 #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in coefficients_current]))
         
         return im_mn

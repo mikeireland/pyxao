@@ -113,10 +113,14 @@ class DeformableMirror():
         # Construct the phase perturbation induced by the DM surface.
         for i in range(len(self.px)):
             # Adde the contribution from each actuator together.
+            # Note: phasescreen is in units of m
             phasescreen += nd.interpolation.shift(gg,(self.px[i,1]-sz//2,self.px[i,0]-sz//2),order=1)*coefficients[i]
 
         # Add the DM correction to the wavefronts.
         for wf in self.wavefronts:
+            # The phasescreen gets converted to a true phase: phase = phasecreen * 2pi / lambda
+            # So the same correction in terms of distance gets applied to all wavelengths 
+            # which corresponds to different phase corrections based on the wavelength.
             wf.field = wf.field*np.exp(2j*np.pi*phasescreen/wf.wave)
 
         self.phasescreen = phasescreen

@@ -193,6 +193,8 @@ class ShackHartmann(WFS):
         self.im = np.zeros( (sz,sz) )
 
         # Compute the image appearing on the WFS detector.
+        # Note: this routine assumes that the detector is sensitive to all
+        # wavelengths in the vector of wavefronts given. 
         for i in range(len(self.wavefronts)):
             # plt.subplot(221)
             # plt.imshow(np.angle(self.wavefronts[i].field.real))

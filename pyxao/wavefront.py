@@ -137,7 +137,6 @@ class Wavefront():
             #tic = time.time()
             self.field *= np.exp(2j*np.pi*atm.delays[i][:self.sz,:self.sz]/self.wave)
             #Smooth the edges
-            #pdb.set_trace()
             self.field[:edge_smooth,:] = 1 + (self.field[:edge_smooth,:]-1)* \
                 np.repeat(np.arange(edge_smooth)/edge_smooth,self.sz).reshape(edge_smooth,self.sz)
             self.field[-edge_smooth:,:] = 1 + (self.field[-edge_smooth:,:]-1)* \
@@ -153,7 +152,6 @@ class Wavefront():
         self.field *= self.pupil 
         
     def image(self, return_efield=False):
-        # AZ: Huygens propagation?
         """Return an image based on the current field. 
         
         Zero-pad in order to ensure nyquist sampling. Note that this is currently 

@@ -33,7 +33,7 @@ yUpper = xUpper
 
 """ Calculating the PSF of the telescope """
 myWavefrontPsf = pyxao.Wavefront(wavelength, mPerPix, sz, wavefrontPupil)
-# At this point, the field is simply the default (uniform)
+# At this point, the field is simply the default (uniform magnitude w/ phase of pi/4 across the whole wavefront)
 # We mask it with the pupil to get the E field at 
 # the pupil plane.
 myWavefrontPsf.field *= myWavefrontPsf.pupil
@@ -45,7 +45,6 @@ H = 					myWavefrontPsf.image(False)	# Note: the PSF (H) is intensity by definit
 
 plt.figure(figCount)
 figCount+=1
-
 
 plt.subplot(221)
 plt.imshow(pupilFieldFlat.real)
