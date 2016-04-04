@@ -55,12 +55,14 @@ sz = 256			# side length
 mPerPix = 1.25 * dOut / sz	# pixel scale
 axesScale = [0, sz*mPerPix, 0, sz*mPerPix]
 # Optical properties
-wavelength_sensing = 589e-9		# Sensing wavelength
-wavelength_science = 1064e-9	# Imaging wavelength
+wavelength_sensing = 589e-9			# Sensing wavelength
+wavelength_science_red = 1064e-9	# Imaging wavelength
+wavelength_science_blue = 300e-9	# Imaging wavelength
 # Seeing conditions
-r0_500nm = 5e-2					# Corresponds to 'good seeing' at 500 nm. Used here to calculate r0 at other wavelengths
+r0_500nm = 5e-2	# Corresponds to 'good seeing' at 500 nm. Used here to calculate r0 at other wavelengths
 r0_sensing = [np.power((wavelength_sensing / 500e-9), 1.2) * r0_500nm]
-r0_science = [np.power((wavelength_science / 500e-9), 1.2) * r0_500nm]
+r0_science_blue = [np.power((wavelength_science_blue / 500e-9), 1.2) * r0_500nm]
+r0_science_red = [np.power((wavelength_science_red / 500e-9), 1.2) * r0_500nm]
 
 wf_sensing = pyxao.Wavefront(
 	wave=wavelength_sensing,
@@ -69,14 +71,25 @@ wf_sensing = pyxao.Wavefront(
 	pupil=wavefrontPupil
 	)
 
-wf_science = pyxao.Wavefront(
-	wave=wavelength_science,
+wf_science_red = pyxao.Wavefront(
+	wave=wavelength_science_red,
 	m_per_pix=mPerPix,
 	sz=sz,
 	pupil=wavefrontPupil
 	)
 
-wavefronts = [wf_sensing, wf_science]
+wf_science_blue = pyxao.Wavefront(
+	wave=wavelength_science_blue,
+	m_per_pix=mPerPix,
+	sz=sz,
+	pupil=wavefrontPupil
+	)
+
+# Remember: the WFS and DM wavefronts are different!
+# in a closed-loop AO system the DM corrects all wavelengths,
+# but the WFS only senses at some of them.
+wfs_wavefronts = [wf_sensing]
+dm_wavefronts = [wf_sensing, wf_science_red, wf_science_blue]
 
 # Printing & plotting wavefront data
 printDivider()
@@ -85,7 +98,8 @@ printDivider()
 print 'Size (pixels)\t\t', wf_sensing.sz
 print 'Metres per px\t\t', wf_sensing.m_per_pix
 print 'Sensing wavelength (nm)\t', wf_sensing.wave*1e9
-print 'Science wavelength (nm)\t', wf_science.wave*1e9
+print 'Science wavelength (red) (nm)\t', wf_science_red.wave*1e9
+print 'Science wavelength (blue) (nm)\t', wf_science_blue.wave*1e9
 
 """
 newFigure()
@@ -104,7 +118,7 @@ geometry = 'square'
 wfs = pyxao.ShackHartmann(
 	mask=None,
 	geometry=geometry,
-	wavefronts=wavefronts,
+	wavefronts=wfs_wavefronts,
 	central_lenslet=False,
 	lenslet_pitch=lensletPitch,
 	sampling=1.0,
@@ -119,7 +133,7 @@ printDivider()
 print 'Geometry\t\t', geometry
 print 'Lenslets (total)\t', wfs.nlenslets
 print 'Lenslet pitch\t\t', wfs.lenslet_pitch
-print 'Pixels per lenslet\t', wfs.lenslet_pitch/wavefronts[0].m_per_pix
+print 'Pixels per lenslet\t', wfs.lenslet_pitch/wfs_wavefronts[0].m_per_pix
 print 'Focal length\t\t', wfs.flength
 print 'Total # of measurements\t', wfs.nsense
 
@@ -129,7 +143,7 @@ influenceFunction = 'gaussian'
 actuatorPitch = wf_sensing.sz / nActuators * mPerPix
 dm  = pyxao.DeformableMirror(
 	influence_function=influenceFunction,
-	wavefronts=wavefronts,
+	wavefronts=dm_wavefronts,
 	central_actuator=False,
 	plotit=False,
 	actuator_pitch=actuatorPitch,
@@ -160,8 +174,7 @@ plt.title('SH WFS and DM geometry')
 """ AO system """
 ao = pyxao.SCFeedBackAO(
 	dm=dm,
-	wfs=wfs,
-	image_ixs=[1]
+	wfs=wfs
 	)
 
 pokeStroke = 1e-7	
@@ -207,7 +220,8 @@ print 'Elevation (m)\t\t', elevations[0]
 print 'Wind speed (m/s)\t', vWind[0]
 print 'Wind angle (deg)\t', np.rad2deg(angleWind[0])
 print 'Airmass\t\t\t',	airmass[0]
-print 'r0 (science) (m)\t', r0_science[0]
+print 'r0 (science) (blue) (m)\t', r0_science_blue[0]
+print 'r0 (science) (red) (m)\t', r0_science_red[0]
 print 'r0 (sensing) (m)\t', r0_sensing[0]
 
 atm_sensing = pyxao.Atmosphere(
@@ -220,12 +234,22 @@ atm_sensing = pyxao.Atmosphere(
 	airmass=airmass
 	)
 
-atm_science = pyxao.Atmosphere(
+atm_science_blue = pyxao.Atmosphere(
 	sz=sz,
 	m_per_pix=mPerPix,
 	elevations=elevations,
 	v_wind=vWind,
-	r_0=r0_science,
+	r_0=r0_science_blue,
+	angle_wind=angleWind,
+	airmass=airmass
+	)
+
+atm_science_red = pyxao.Atmosphere(
+	sz=sz,
+	m_per_pix=mPerPix,
+	elevations=elevations,
+	v_wind=vWind,
+	r_0=r0_science_red,
 	angle_wind=angleWind,
 	airmass=airmass
 	)
@@ -236,17 +260,18 @@ psf_peak = np.max(psf)
 
 # Adding the atmospheres to the wavefronts
 wf_sensing.add_atmosphere(atm_sensing)
-wf_science.add_atmosphere(atm_science)
+wf_science_blue.add_atmosphere(atm_science_blue)
+wf_science_red.add_atmosphere(atm_science_red)
 
 # ao.correct_twice(plotit=True)
 ao.run_loop(
 	dt=0.002,
-	nphot=None,
+	nphot=1e4,
 	niter=500,
 	nframesbetweenplots=10,
 	plotit=True,
-	gain=1.0,
-	dodgy_damping=0.9
+	K_i=1.0,
+	K_leak=0.9
 	)
 
 """
