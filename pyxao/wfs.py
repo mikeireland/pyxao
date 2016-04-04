@@ -137,7 +137,7 @@ class ShackHartmann(WFS):
             # Maksing each wavefront to the shape of the subapertures.
             if geometry == 'hexagonal':
                 one_lenslet *= ot.utils.hexagon(wf.sz,lw)
-            elif geometry == 'square':  
+            elif geometry == 'square':
                 one_lenslet *= ot.utils.square(wf.sz,lw)
             else:
                 print("ERROR: invalid wavefront sensor geometry")

@@ -250,6 +250,13 @@ class SCFeedBackAO():
         coefficients_current = np.zeros(self.dm.nactuators)
         sz = self.dm.wavefronts[-1].sz
         im_mn = np.zeros( (2*sz,2*sz) )
+        
+        nims = 0
+        im_perfect = np.zeros( (sz*2,sz*2) )
+        for ix in self.image_ixs:
+            self.dm.wavefronts[ix].field = self.dm.wavefronts[ix].pupil
+            im_perfect += self.dm.wavefronts[ix].image()
+
 
         for i in range(niter):
             # Evolve the atmosphere.
@@ -284,28 +291,40 @@ class SCFeedBackAO():
             for ix in self.image_ixs:
                 # Huygens propagation to generate the science image (i.e. FFT)
                 im_science += self.dm.wavefronts[ix].image()
-            im_mn += im_science 
+            if (i != 0):
+                im_mn += im_science 
+                nims += 1
             
             # Plot stuff if we want.
             if plotit & ((i % nframesbetweenplots)==0):
                 plt.clf()
+
                 # Plot the WFS detector image
                 plt.subplot(131)
                 plt.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
                 # plt.plot(self.wfs.px[:,0], self.wfs.px[:,1],'x')
                 plt.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
                 plt.title('WFS')
+
                 # Plot the corrected phase 
                 plt.subplot(132)
                 plt.imshow(np.angle(corrected_field)*self.dm.wavefronts[0].pupil,interpolation='nearest')
                 plt.title('Corrected Phase')
+                
                 # Plot the science image
+                plt.subplot(132)
+                plt.imshow(np.angle(corrected_field)*self.dm.wavefronts[0].pupil,interpolation='nearest')
+                plt.title('Corrected Phase')
+
                 plt.subplot(133)
                 plt.imshow(im_science[sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
                 plt.title('Science Image')
                 plt.draw()
+
+                # AZ: real-time plotting on my machine requires this line...
                 plt.pause(0.00001)
                 #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in coefficients_current]))
-        
-        return im_mn
+
+        im_mn /= nims     
+        return im_mn, im_perfect
         
