@@ -280,12 +280,41 @@ class SCFeedBackAO():
 
         sz = self.dm.wavefronts[-1].sz
         image_mean = np.zeros( (2*sz,2*sz) )
+        im_science = np.zeros( (len(self.image_ixs),sz*2,sz*2) )
+        im_science_all = np.zeros( (sz*2,sz*2) )
 
-        nims = 0
+        # nims = 0
         im_perfect = np.zeros( (sz*2,sz*2) )
         for ix in self.image_ixs:
             self.dm.wavefronts[ix].field = self.dm.wavefronts[ix].pupil
-            im_perfect += self.dm.wavefronts[ix].image()      
+            im_perfect += self.dm.wavefronts[ix].image()   
+
+        # Setting up for plotting
+        # if plotit:
+            # plt.rc('text', usetex=True)
+            # fig = plt.figure()
+
+            # ax1 = fig.add_subplot(231)  # WFS detector image
+            # ax1.title.set_text(r'WFS detector')
+            # ax1.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
+
+            # ax2 = fig.add_subplot(232)  # Corrected phase 1
+            # ax2.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
+            
+            # ax3 = fig.add_subplot(235)  # Corrected phase 2
+            # ax3.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
+            
+            # ax4 = fig.add_subplot(233)  # Science image 1
+            # ax4.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
+            
+            # ax5 = fig.add_subplot(236)  # Science image 2
+            # ax5.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
+
+            # plot1 = ax1.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
+            # plot2 = ax2.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
+            # plot3 = ax3.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
+            # plot4 = ax4.imshow(im_science[0,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
+            # plot5 = ax5.imshow(im_science[1,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
 
         """ AO Control loop """
         for k in range(niter):
@@ -318,48 +347,60 @@ class SCFeedBackAO():
             coefficients_current = coefficients_next;
 
             # Create the image. By FFT for now...
-            im_science = np.zeros( (sz*2,sz*2) )
+            im_science = np.zeros( (len(self.image_ixs),sz*2,sz*2) )
+            im_science_all = np.zeros( (sz*2,sz*2) )
 
             # Remember that image_ixs are indices in the DM wavefront list, 
             # NOT the WFS wavefront list.
+            im_ix = 0
             for ix in self.image_ixs:
                 # Huygens propagation to generate the science image
-                im_science += self.dm.wavefronts[ix].image()
+                im_science_all += self.dm.wavefronts[ix].image()
+                im_science[im_ix] = self.dm.wavefronts[ix].image()
+                im_ix += 1
+
             if (k != 0):
-                image_mean += im_science 
-                nims += 1
-            
-            # Plot stuff if we want.
-            if plotit & ((k % nframesbetweenplots)==0):
-                plt.clf()
+                image_mean += im_science_all 
+                # nims += 1
+                     
+            if plotit & ((k % nframesbetweenplots)==0):  
+                if k == 0:
+                    plt.rc('text', usetex=True)
+                    fig = plt.figure()
 
-                # Plot the WFS detector image
-                plt.subplot(231)
-                plt.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
-                # plt.plot(self.wfs.px[:,0], self.wfs.px[:,1],'x')
-                plt.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
-                plt.title('WFS')
+                    ax1 = fig.add_subplot(231)  # WFS detector image
+                    ax1.title.set_text(r'WFS detector')
+                    ax1.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
 
-                # Plot the corrected phase at the imaging wavelengths
-                plt.subplot(232)
-                plt.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil,interpolation='nearest')
-                plt.title('Corrected Phase (0)')
-                if len(self.image_ixs) > 1:
-                    plt.subplot(235)
-                    plt.imshow(np.angle(self.dm.wavefronts[self.image_ixs[1]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil,interpolation='nearest')
-                    plt.title('Corrected Phase (1)')
+                    ax2 = fig.add_subplot(232)  # Corrected phase 1
+                    ax2.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
+                    
+                    ax3 = fig.add_subplot(235)  # Corrected phase 2
+                    ax3.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
+                    
+                    ax4 = fig.add_subplot(233)  # Science image 1
+                    ax4.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
+                    
+                    ax5 = fig.add_subplot(236)  # Science image 2
+                    ax5.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
 
-                # Plot the science image
-                # Note that there is only one science image!
-                plt.subplot(233)
-                plt.imshow(im_science[sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
-                plt.title('Science Image')
+                    plot1 = ax1.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
+                    plot2 = ax2.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
+                    plot3 = ax3.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
+                    plot4 = ax4.imshow(im_science[0,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
+                    plot5 = ax5.imshow(im_science[1,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
+                else:
+                    plot1.set_data(self.wfs.im)
+                    plot2.set_data(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil)
+                    plot3.set_data(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil)
+                    plot4.set_data(im_science[0,sz-20:sz+20,sz-20:sz+20])
+                    plot5.set_data(im_science[1,sz-20:sz+20,sz-20:sz+20])
+
                 plt.draw()
-
-                # AZ: real-time plotting on my machine requires this line...
                 plt.pause(0.00001)
-                #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in coefficients_current]))
+        image_mean /= niter
 
-        image_mean /= nims     
+        #TODO: plot Strehl as a function of time 
+
         return image_mean, im_perfect
         
