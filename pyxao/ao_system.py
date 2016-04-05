@@ -289,33 +289,6 @@ class SCFeedBackAO():
             self.dm.wavefronts[ix].field = self.dm.wavefronts[ix].pupil
             im_perfect += self.dm.wavefronts[ix].image()   
 
-        # Setting up for plotting
-        # if plotit:
-            # plt.rc('text', usetex=True)
-            # fig = plt.figure()
-
-            # ax1 = fig.add_subplot(231)  # WFS detector image
-            # ax1.title.set_text(r'WFS detector')
-            # ax1.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
-
-            # ax2 = fig.add_subplot(232)  # Corrected phase 1
-            # ax2.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
-            
-            # ax3 = fig.add_subplot(235)  # Corrected phase 2
-            # ax3.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
-            
-            # ax4 = fig.add_subplot(233)  # Science image 1
-            # ax4.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
-            
-            # ax5 = fig.add_subplot(236)  # Science image 2
-            # ax5.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
-
-            # plot1 = ax1.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
-            # plot2 = ax2.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
-            # plot3 = ax3.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
-            # plot4 = ax4.imshow(im_science[0,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
-            # plot5 = ax5.imshow(im_science[1,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
-
         """ AO Control loop """
         for k in range(niter):
             # Evolve the atmosphere.
@@ -334,7 +307,7 @@ class SCFeedBackAO():
             y_current = sensors.flatten()   # y at timestep k
             
             # Apply control logic.
-            # AZ TODO: allow multiple control regimes to be input - e.g. P, PI, PD, PID etc. 
+            #TODO: check that these work!
             coefficients_next = np.zeros(self.dm.nactuators)    # timestep k + 1
             if mode=='PID':
                 coefficients_next += K_leak * coefficients_current - K_i * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
@@ -371,33 +344,33 @@ class SCFeedBackAO():
                     ax1 = fig.add_subplot(231)  # WFS detector image
                     ax1.title.set_text(r'WFS detector')
                     ax1.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
-
                     ax2 = fig.add_subplot(232)  # Corrected phase 1
                     ax2.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
-                    
-                    ax3 = fig.add_subplot(235)  # Corrected phase 2
-                    ax3.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
-                    
                     ax4 = fig.add_subplot(233)  # Science image 1
                     ax4.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[0]].wave*1e9))
-                    
-                    ax5 = fig.add_subplot(236)  # Science image 2
-                    ax5.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
-
                     plot1 = ax1.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
                     plot2 = ax2.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
-                    plot3 = ax3.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
                     plot4 = ax4.imshow(im_science[0,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
-                    plot5 = ax5.imshow(im_science[1,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
+
+                    if len(self.image_ixs) > 1:
+                        ax3 = fig.add_subplot(235)  # Corrected phase 2
+                        ax3.title.set_text(r'Corrected phase, $\lambda$ = %d nm' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
+                        ax5 = fig.add_subplot(236)  # Science image 2
+                        ax5.title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[1]].wave*1e9))
+                        plot3 = ax3.imshow(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil,interpolation='nearest', cmap=cm.gist_rainbow)
+                        plot5 = ax5.imshow(im_science[1,sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
+                    
                 else:
                     plot1.set_data(self.wfs.im)
                     plot2.set_data(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[0]].pupil)
-                    plot3.set_data(np.angle(self.dm.wavefronts[self.image_ixs[0]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil)
                     plot4.set_data(im_science[0,sz-20:sz+20,sz-20:sz+20])
-                    plot5.set_data(im_science[1,sz-20:sz+20,sz-20:sz+20])
+                    if len(self.image_ixs) > 1:
+                        plot3.set_data(np.angle(self.dm.wavefronts[self.image_ixs[1]].field)*self.dm.wavefronts[self.image_ixs[1]].pupil)
+                        plot5.set_data(im_science[1,sz-20:sz+20,sz-20:sz+20])
 
                 plt.draw()
                 plt.pause(0.00001)
+
         image_mean /= niter
 
         #TODO: plot Strehl as a function of time 
