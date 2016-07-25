@@ -56,7 +56,7 @@ yUpper = xUpper
 myWavefront = pyxao.Wavefront(wavelength, mPerPix, sz, wavefrontPupil)
 print '======= Wavefront data ========'
 print 'myWavefront.sz =', myWavefront.sz
-print 'myWavefront.m_per_pix =', myWavefront.m_per_pix
+print 'myWavefront.m_per_px =', myWavefront.m_per_px
 # field is of type ndarray
 # print 'field =', myWavefront.field
 print 'size(myWavefront.field) =', myWavefront.field.size
@@ -68,7 +68,7 @@ print 'myWavefront.propagators =', myWavefront.propagators
 """ Atmosphere data """
 myAtmosphere = pyxao.Atmosphere(sz, mPerPix, elevations, v_wind, r0, angle_wind, airmass)
 print '======= Atmosphere data ========'
-print 'myAtmosphere.m_per_pix =', myAtmosphere.m_per_pix
+print 'myAtmosphere.m_per_px =', myAtmosphere.m_per_px
 print 'myAtmosphere.sz =', myAtmosphere.sz
 # print 'myAtmosphere.elevations =', myAtmosphere.elevations
 print 'myAtmosphere.dz =', myAtmosphere.dz

@@ -1,4 +1,5 @@
 from __future__ import division, print_function
+from pyxao import *
 import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,30 +30,36 @@ class SCFeedBackAO():
         location of wfs and DM conjugate
     image_ixs: list
         A list of indexes for which images should be calculated, i.e. the 
-        science wavefront indices from the dm instance.
+        science wavefront indices in the dm wavefronts list.
     dm_poke_scale: float
         A normalisation for poking the deformable mirror, used in response matrix
         sensing and the loop. Should be well within the linear regime."""
 
-    def __init__(self,dm,wfs,conjugate_location=0.0,image_ixs=None,
-        # A normalisation for poking the deformable mirror, used in response matrix sensing and the loop. 
-        # Should be well within the linear regime.
-        dm_poke_scale=1e-7):
+    def __init__(self,
+                dm,
+                wfs,
+                conjugate_location=0.0,
+                image_ixs=None,
+                dm_poke_scale=1e-7):
         
         # A list of indexes for which images should be calculated, i.e. the science wavefront indices from the dm instance.
+        # If no image indexes are specified, then it is assumed that all wavefronts in the DM
+        # that are not sensed by the WFS are used for imaging.
         if not image_ixs:
-            image_ixs = range(len(dm.wavefronts),len(wfs.wavefronts))
-        # AZ: make sure image_ixs is a list, even if only with one element
+            image_ixs = []            
+            for j in range(len(dm.wavefronts)):
+                if dm.wavefronts[j] not in wfs.wavefronts:
+                    image_ixs.append(j)
         elif type(image_ixs) == int:
             image_ixs = [image_ixs]
-        else:
+        elif type(image_ixs) != list:
             print("OOPS: invalid type for image_ixs - must be of type list or int!")
             raise UserWarning
 
+        # Conjugate location
         if conjugate_location != 0:
             print("OOPS: Not implemented yet - only ground layer conugation so far")
             raise UserWarning
-            
         # location of WFS and DM conjugate
         self.conjugate_location=conjugate_location
         
@@ -61,17 +68,47 @@ class SCFeedBackAO():
         self.dm = dm
         self.wfs = wfs        
         self.dm_poke_scale = dm_poke_scale
+
+    """  Find the PSF of the AO system at a given wavelength index. 
+    """
+    def findPSF(self,
+                wavelength_idx, 
+                plotIt=False):
+        
+        myWavefrontPsf = pyxao.Wavefront(
+            wave=self.dm.wavefronts[wavelength_idx].wave, 
+            m_per_px=self.dm.wavefronts[wavelength_idx].m_per_px, 
+            sz=self.dm.wavefronts[wavelength_idx].sz)
+        myWavefrontPsf.pupil = self.dm.wavefronts[wavelength_idx].pupil
+        
+        # After initialisation, the field is uniform - corresponds to
+        # a point source at infinity.
+        # Now, we need to mask it by the pupil:
+        myWavefrontPsf.field *= myWavefrontPsf.pupil
+        
+        # The PSF is the resulting intensity at the image plane.
+        psf = myWavefrontPsf.image(return_efield=False)
+        if plotIt:
+            axesScale = [0, wf.sz*wf.m_per_px, 0, wf.sz*wf.m_per_px]
+            plt.figure()
+            plt.imshow(psf, extent=axesScale)
+            plt.title('PSF of optical system')
+        
+        return psf
         
     def find_response_matrix(self,mode='onebyone',amplitude=1e-7):
         """Poke the actuators and record the WFS output"""
         self.response_matrix = np.empty( (self.dm.nactuators,self.wfs.nsense) )
+        print("Computing AO system response matrix.")
         if mode=='onebyone':
             # We poke each actuator twice (once +ve, once -ve) and take the abs. mean WFS response
+            print(".",end="")
             for i in range(self.dm.nactuators):
                 
-                #Flatten the WFS wavefronts
+                # Flatten the WFS wavefronts
                 for wf in self.wfs.wavefronts:
-                    wf.field=wf.pupil
+                    # wf.field = wf.pupil
+                    wf.flatten_field()
                 
                 # Poking an actuator in the +ve direction.
                 act = np.zeros(self.dm.nactuators)                
@@ -79,9 +116,10 @@ class SCFeedBackAO():
                 self.dm.apply(act)          # Apply the poke to the wavefront, perturb its phase
                 wfs_plus = self.wfs.sense() # Get the corresonding WFS measurement
                 
-                #Flatten the WFS wavefronts
+                # Flatten the WFS wavefronts
                 for wf in self.wfs.wavefronts:
-                    wf.field=wf.pupil
+                    # wf.field = wf.pupil
+                    wf.flatten_field()
 
                 # Poking an actuator in the -ve direction.
                 act = np.zeros(self.dm.nactuators)
@@ -92,7 +130,7 @@ class SCFeedBackAO():
                 #Check that poking in both directions is equivalent!
                 if (np.sum(wfs_plus*wfs_minus)/np.sum(wfs_plus*wfs_plus) > -0.9):
                     print("WARNING: Poking the DM is assymetric!!!")
-                    pdb.set_trace()
+                    # pdb.set_trace()
 
                 # Taking the mean response value.
                 self.response_matrix[i] = 0.5*(wfs_plus - wfs_minus).flatten()
@@ -123,7 +161,7 @@ class SCFeedBackAO():
             print("ERROR: reconstructor mode")
             raise UserWarning
             
-    def correct_twice(self,plotit=False):
+    def correct_twice(self,plotIt=False):
         """Find the pupil field, then correct it twice.
         
         TEST method, but ERROR checking still needed!
@@ -139,7 +177,7 @@ class SCFeedBackAO():
         """
         # Reset the distorted wavefront to that caused by the atmosphere and nothing else
         for wf in self.wfs.wavefronts:
-            wf.pupil_field()    # Reset the pupil field
+            wf.atm_field()    # Reset the pupil field
             field0 = wf.field
 
         # Sense the wavefront.
@@ -151,15 +189,12 @@ class SCFeedBackAO():
         
         # Reset the wavefront (since it gets modified by wfs.sense())
         for wf in self.wfs.wavefronts:
-            wf.pupil_field()
+            wf.atm_field()
             field1 = wf.field
         
         # Apply a correction. This modifies (but does not reset) the 
         # field attribute of wf:
         #   wf.field = wf.field*np.exp(2j*np.pi*phasescreen/wf.wave)
-        # We have to reset the wavefront using
-        # pupil_field() before we call this because field is modified by
-        # wfs.sense() (gets masked with the lenslet pupils)
         self.dm.apply(coefficients)
         
         # Sense after the first correction
@@ -168,7 +203,7 @@ class SCFeedBackAO():
         coefficients += -np.dot(self.reconstructor,measurements1.flatten())*self.dm_poke_scale
         
         for wf in self.wfs.wavefronts:
-            wf.pupil_field()
+            wf.atm_field()
             field2 = wf.field
         
         # Apply a second correction
@@ -178,7 +213,7 @@ class SCFeedBackAO():
         measurements2 = self.wfs.sense()
         im2 = self.wfs.im.copy()
 
-        if plotit==True:
+        if plotIt==True:
             plt.figure()
             plt.suptitle('WFS detector images')
             plt.subplot(131)
@@ -222,8 +257,21 @@ class SCFeedBackAO():
 
         return [measurements0,measurements1,measurements2],[im0,im1,im2] 
         
-    def run_loop(self,dt=0.002,nphot=1e4,mode='integrator',niter=1000,nframesbetweenplots=10,plotit=False,\
-        gain=1.0,dodgy_damping=0.9):
+    def run_loop(self, dt, 
+                nphot = None,
+                mode = 'integrator',
+                niter = 100,
+                nframesbetweenplots = 10,
+                plotIt = False,
+                K_p = None,
+                K_i = None,
+                K_d = None,
+                K_leak = 0.9,
+                psf_ix = 0,
+                psf_sz_cropped = None,
+                plate_scale_as_px = None,
+                detector_size_px = (100,100)    # For now this is only used in plotting
+                ):
         """Run an AO servo loop.
         
         It is assumed that all wavefronts share the same atmosphere!
@@ -235,77 +283,177 @@ class SCFeedBackAO():
         nphot: float
             Number of photons per frame (noise)
         mode: string
-            Servo loop mode. 'integrator' is a simple integrator.
+            Servo loop mode. 
+            * 'integrator' is classic integral control with parameters K_i and K_leak.
+            * 'PID' is simple proportional-integral-derivative control. 
+            For PD, PI, etc. control, simply set the unneeded gain terms to zero.
         niter: int
             Number of iterations of the loop.
-        plotit: boolean
+        plotIt: boolean
             Do we plot potentially useful outputs? NB, this is all pretty slow with
             matplotlib.
-        gain: float
-            Servo loop gain. 
-        dodgy_damping: float
-            Due to Mike's lack of understanding of servo theory, damping the DM
-            position to zero in the absence of WFS seems to help.
+        K_i: float
+            Integral gain. 
+        K_p: float
+            Proportional gain.
+        K_d: float
+            Derivative gain.
+        K_leak: float
+            Leak coefficient for integral control. (allows transient errors in WFS 
+            measurements to leak out of the control input over time)
+            Is automatically zeroed if K_i is zeroed. 
+        psf_ix: int
+            Index in self.image_ixs corresponding to the wavelength of the PSF to be returned.
+        plate_scale_as_px: float
+            Plate scale for the output science images. For now, only put in the plate scale instead of the Nyquist sampling because we image at a range of wavelengths with the same detector.
         """
-        coefficients_current = np.zeros(self.dm.nactuators)
-        sz = self.dm.wavefronts[-1].sz
-        im_mn = np.zeros( (2*sz,2*sz) )
+        # Zero the leak coefficient if no integral control is used. 
+        if not K_i:
+            K_leak = 0.0
 
-        for i in range(niter):
-            # Evolve the atmosphere.
-            self.dm.wavefronts[0].atm.evolve(dt*i)
-            
-            # Reset the pupil fields.
-            for wf in self.dm.wavefronts:
-                wf.pupil_field()
-            
+        # DM coefficients (control commands)
+        coefficients_current = np.zeros(self.dm.nactuators) # timestep k
+        
+        # WFS measurements
+        y_current = np.zeros(self.wfs.nsense)    # timestep k
+        y_old = np.zeros(self.wfs.nsense)        # timestep k - 1
+
+        # Size of the largest image that will be generated.
+        imsize = 0
+        for ix in self.image_ixs:
+          imsize = max(imsize, self.dm.wavefronts[ix].image(plate_scale_as_px=plate_scale_as_px).shape[0])  
+
+        # Image averaged over all AO loop iterations.
+        im_mean = np.zeros((imsize, imsize))
+
+        # Size of the uncropped PSF image.
+        psf_sz = self.dm.wavefronts[psf_ix].image(plate_scale_as_px=plate_scale_as_px).shape[0]
+        # Oversampling factor of the PSF. Note that N_OS is equivalent to the 'sigma' of the pupil image in the DL.
+        plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
+        N_OS = self.dm.wavefronts[psf_ix].wave / self.dm.wavefronts[psf_ix].D / 2 / plate_scale_rad_px
+        # pdb.set_trace()
+        # How many 'sigmas' we want the returned PSF grid to encompass. TODO: is there a better way of doing this?
+        if not psf_sz_cropped:
+            psf_sigma_limit_px = 8   
+            psf_sz_cropped = np.ceil(min(psf_sz, 2 * N_OS * psf_sigma_limit_px))
+        else:
+            psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))
+        psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))
+        
+       # Diffraction-limited 'perfect' image.
+        im_perfect = np.zeros((imsize,imsize))
+        for ix in self.image_ixs:
+            # Reset the field to a flat wavefront.
+            # self.dm.wavefronts[ix].field = self.dm.wavefronts[ix].pupil
+            # im = self.dm.wavefronts[ix].image()
+            im = self.dm.wavefronts[ix].psf_dl()
+            pad_x = (imsize - im.shape[0])//2
+            pad_y = (imsize - im.shape[1])//2
+            im_perfect[pad_x:pad_x + im.shape[0],pad_y:pad_y + im.shape[1]] += im   
+
+        """ AO Control loop """
+        # At this point, the field variables all include the atmosphere.
+        # Order in loop should be 
+        # apply atmosphere --> apply DM correction --> capture images --> sense wavefront
+        for k in range(niter):  
+            # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.          
+            for wf in self.dm.wavefronts:                
+                wf.atm.evolve(dt * k)   # This doesn't affect the field variable.
+                wf.atm_field()                
+            # Now, the wavefront fields include only the atmosphere.
+
             # Apply the wavefront correction.
+            # Note that this does NOT reset the wavefront but simply applies the phase change to the field variable.
             self.dm.apply(coefficients_current)
-            
-            # Save a copy of the corrected pupil phase.
-            corrected_field = self.dm.wavefronts[0].field.copy()
-            
-            #Sense the corrected wavefront.
-            sensors = self.wfs.sense(nphot=nphot)
-            
+
+            # Sense the corrected wavefront.      
+            measurements = self.wfs.sense(nphot = nphot) # Does not modify the field variable.
+
+            y_old = y_current               # y at timestep k - 1
+            y_current = measurements.flatten()   # y at timestep k
+
             # Apply control logic.
-            # pdb.set_trace()
-            if mode=='integrator':
-                coefficients_current = dodgy_damping*coefficients_current - gain*np.dot(self.reconstructor,sensors.flatten())*self.dm_poke_scale
+            #TODO: check that PID control works!
+            coefficients_next = np.zeros(self.dm.nactuators)    # timestep k + 1
+            if mode == 'PID':
+                coefficients_next += K_leak * coefficients_current - K_i * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
+                coefficients_next += - K_p * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
+                coefficients_next += - K_d * (1/dt) * (np.dot(self.reconstructor,y_current) - np.dot(self.reconstructor,y_old)) * self.dm_poke_scale
+            elif mode == 'integrator':  
+                coefficients_next += K_leak * coefficients_current - K_i * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
             else:
-                print('ERROR: invalid control loop mode! Use integrator for now...')
+                print('ERROR: invalid control loop mode! Use PID for now...')
                 raise UserWarning
 
-            # Create the image. By FFT for now...
-            im_science = np.zeros( (sz*2,sz*2) )
+            coefficients_current = coefficients_next;
 
-            # AZ
-            # for ix in range(self.image_ixs):
+            # Create the image. By FFT for now...
+            im_science = np.zeros((len(self.image_ixs), imsize, imsize))
+            im_science_all = np.zeros((imsize, imsize))
             for ix in self.image_ixs:
-                # Huygens propagation to generate the science image (i.e. FFT)
-                im_science += self.dm.wavefronts[ix].image()
-            im_mn += im_science 
-            
-            # Plot stuff if we want.
-            if plotit & ((i % nframesbetweenplots)==0):
-                plt.clf()
-                # Plot the WFS detector image
-                plt.subplot(131)
-                plt.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
-                # plt.plot(self.wfs.px[:,0], self.wfs.px[:,1],'x')
-                plt.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
-                plt.title('WFS')
-                # Plot the corrected phase 
-                plt.subplot(132)
-                plt.imshow(np.angle(corrected_field)*self.dm.wavefronts[0].pupil,interpolation='nearest')
-                plt.title('Corrected Phase')
-                # Plot the science image
-                plt.subplot(133)
-                plt.imshow(im_science[sz-20:sz+20,sz-20:sz+20],interpolation='nearest', cmap=cm.gist_heat)
-                plt.title('Science Image')
+                im = self.dm.wavefronts[ix].image(plate_scale_as_px = plate_scale_as_px)                
+                # Saving the PSF.
+                if ix == psf_ix:
+                    psfs_cropped[k] = mu.centreCrop(im, psf_sz_cropped)
+                    if normalise_psf:
+                        psfs_cropped[k] /= sum(psf_sz_cropped.flatten())
+                pad_x = (imsize - im.shape[0])//2
+                pad_y = (imsize - im.shape[1])//2       
+                im_science[ix,pad_x:pad_x + im.shape[0],pad_y:pad_y + im.shape[1]] = im  # Science images separated into different wavelengths
+                im_science_all += im_science[ix]   # Stacked science image            
+
+            # Update the mean image.
+            if (k != 0):
+                im_mean += im_science_all 
+                 
+            #------------------ PLOTTING ------------------#
+            if plotIt & ((k % nframesbetweenplots) == 0):                  
+                if k == 0:
+                    axes = []
+                    plots = []
+                    N_science_imgs = len(self.image_ixs)
+                    plt.rc('text', usetex=True)
+
+                    # WFS plot                    
+                    fig_wfs = mu.newfigure(2,2)
+                    ax_wfs = fig_wfs.add_subplot(111)  # WFS detector image
+                    ax_wfs.title.set_text(r'WFS detector')
+                    ax_wfs.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
+                    plot_wfs = ax_wfs.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
+
+                    fig = mu.newfigure(width=2,height=N_science_imgs)
+                    
+                    for j in range(N_science_imgs):
+                        # Phase
+                        axes.append(fig.add_subplot(N_science_imgs,2,2*j+1)) 
+                        axes[-1].title.set_text(r'Corrected phase ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
+                        plots.append(axes[-1].imshow(np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
+                        mu.colourbar(plots[-1])
+                        # Science image
+                        axes.append(fig.add_subplot(N_science_imgs,2,2*j+2))  
+                        axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
+                        pad_x = max((imsize - detector_size_px[0]) // 2, 0)
+                        pad_y = max((imsize - detector_size_px[1]) // 2, 0)
+                        im_cropped = im_science[j,pad_x:pad_x + min(imsize, detector_size_px[0]),pad_y:pad_y + min(imsize, detector_size_px[1])]
+                        plots.append(axes[-1].imshow(im_cropped,interpolation='nearest', cmap=cm.gist_heat, norm=LogNorm()))
+                        mu.colourbar(plots[-1])
+                else:
+                    # Update the plots
+                    plot_wfs.set_data(self.wfs.im)  
+                    fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, K_i, K_leak))
+                    for j in range(N_science_imgs):
+                        plots[2*j].set_data(np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil)
+                        pad_x = max((imsize - detector_size_px[0]) // 2, 0)
+                        pad_y = max((imsize - detector_size_px[1]) // 2, 0)
+                        im_cropped = im_science[j,pad_x:pad_x + min(imsize, detector_size_px[0]),pad_y:pad_y + min(imsize, detector_size_px[1])]
+                        plots[2*j+1].set_data(im_cropped)
+
                 plt.draw()
-                plt.pause(0.00001)
-                #print(",".join(["{0:4.1f}".format(a/self.dm_poke_scale) for a in coefficients_current]))
-        
-        return im_mn
+                plt.pause(0.00001)  # Need this to plot on some machines.
+            #---------------------------------------------#
+
+        # Determine the mean image.
+        im_mean /= niter
+
+        return psfs_cropped, im_mean, im_perfect
         

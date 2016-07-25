@@ -63,3 +63,6 @@ target/
 
 #Intellij IDE project specific settings
 .idea/
+
+# Mac directory stuff
+.DS_Store
