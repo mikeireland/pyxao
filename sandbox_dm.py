@@ -41,7 +41,7 @@ oldField = myWavefront.field
 oldImage = myWavefront.image()
 
 """ Deformable mirror """
-myDm = pyxao.DeformableMirror(wavefronts=[myWavefront],plotit=False,geometry='hexagonal')
+myDm = pyxao.DeformableMirror(wavefronts=[myWavefront],plotIt=False,geometry='hexagonal')
 coeffs = np.random.random_sample(myDm.nactuators)*wavelength
 # Applying wavefront correction
 myDm.apply(coeffs)

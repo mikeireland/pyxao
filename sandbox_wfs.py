@@ -47,7 +47,7 @@ myWfs = pyxao.WFS([myWavefront])
 
 """ Shack-Hartmann wavefront sensor """
 pxPerSubap = 12
-lensletPitch = pxPerSubap * myWavefront.m_per_pix
+lensletPitch = pxPerSubap * myWavefront.m_per_px
 myShWfs = pyxao.ShackHartmann(\
 		wavefronts=[myWavefront],\
 	 	geometry='square',\

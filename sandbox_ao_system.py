@@ -22,10 +22,10 @@ def newFigure():
 newFigure.figCount = 0
 
 # Find the PSF of the AO system at a given wavelength.
-def findPSF(wf, plotit=False):
+def findPSF(wf, plotIt=False):
 	myWavefrontPsf = pyxao.Wavefront(
 		wave=wf.wave, 
-		m_per_pix=wf.m_per_pix, 
+		m_per_px=wf.m_per_px, 
 		sz=wf.sz)
 	myWavefrontPsf.pupil = wf.pupil
 	# After initialisation, the field is uniform - corresponds to
@@ -34,8 +34,8 @@ def findPSF(wf, plotit=False):
 	myWavefrontPsf.field *= myWavefrontPsf.pupil
 	# The PSF is the resulting intensity at the image plane.
 	psf = myWavefrontPsf.image(return_efield=False)
-	if plotit:
-		axesScale = [0, wf.sz*wf.m_per_pix, 0, wf.sz*wf.m_per_pix]
+	if plotIt:
+		axesScale = [0, wf.sz*wf.m_per_px, 0, wf.sz*wf.m_per_px]
 		plt.figure()
 		plt.imshow(psf, extent=axesScale)
 		plt.title('PSF of optical system')
@@ -44,7 +44,7 @@ def findPSF(wf, plotit=False):
 """ Wavefronts """
 # Pupil
 dOut = 0.7			# outer annulus diameter
-dIn = 0.3 			# inner annulus diameter
+dIn = 0.0 			# inner annulus diameter
 wavefrontPupil = {	'type':'annulus',\
 					'dout': dOut,\
 					'din' : dIn\
@@ -57,7 +57,7 @@ axesScale = [0, sz*mPerPix, 0, sz*mPerPix]
 # Optical properties
 wavelength_sensing = 589e-9			# Sensing wavelength
 wavelength_science_red = 1064e-9	# Imaging wavelength
-wavelength_science_blue = 300e-9	# Imaging wavelength
+wavelength_science_blue = 550e-9	# Imaging wavelength
 # Seeing conditions
 r0_500nm = 5e-2	# Corresponds to 'good seeing' at 500 nm. Used here to calculate r0 at other wavelengths
 r0_sensing = [np.power((wavelength_sensing / 500e-9), 1.2) * r0_500nm]
@@ -66,21 +66,21 @@ r0_science_red = [np.power((wavelength_science_red / 500e-9), 1.2) * r0_500nm]
 
 wf_sensing = pyxao.Wavefront(
 	wave=wavelength_sensing,
-	m_per_pix=mPerPix,
+	m_per_px=mPerPix,
 	sz=sz,
 	pupil=wavefrontPupil
 	)
 
 wf_science_red = pyxao.Wavefront(
 	wave=wavelength_science_red,
-	m_per_pix=mPerPix,
+	m_per_px=mPerPix,
 	sz=sz,
 	pupil=wavefrontPupil
 	)
 
 wf_science_blue = pyxao.Wavefront(
 	wave=wavelength_science_blue,
-	m_per_pix=mPerPix,
+	m_per_px=mPerPix,
 	sz=sz,
 	pupil=wavefrontPupil
 	)
@@ -96,7 +96,7 @@ printDivider()
 print 'Wavefront'
 printDivider()
 print 'Size (pixels)\t\t', wf_sensing.sz
-print 'Metres per px\t\t', wf_sensing.m_per_pix
+print 'Metres per px\t\t', wf_sensing.m_per_px
 print 'Sensing wavelength (nm)\t', wf_sensing.wave*1e9
 print 'Science wavelength (red) (nm)\t', wf_science_red.wave*1e9
 print 'Science wavelength (blue) (nm)\t', wf_science_blue.wave*1e9
@@ -122,7 +122,7 @@ wfs = pyxao.ShackHartmann(
 	central_lenslet=False,
 	lenslet_pitch=lensletPitch,
 	sampling=1.0,
-	plotit=False,
+	plotIt=False,
 	weights=None
 	)
 
@@ -133,7 +133,7 @@ printDivider()
 print 'Geometry\t\t', geometry
 print 'Lenslets (total)\t', wfs.nlenslets
 print 'Lenslet pitch\t\t', wfs.lenslet_pitch
-print 'Pixels per lenslet\t', wfs.lenslet_pitch/wfs_wavefronts[0].m_per_pix
+print 'Pixels per lenslet\t', wfs.lenslet_pitch/wfs_wavefronts[0].m_per_px
 print 'Focal length\t\t', wfs.flength
 print 'Total # of measurements\t', wfs.nsense
 
@@ -145,7 +145,7 @@ dm  = pyxao.DeformableMirror(
 	influence_function=influenceFunction,
 	wavefronts=dm_wavefronts,
 	central_actuator=False,
-	plotit=False,
+	plotIt=False,
 	actuator_pitch=actuatorPitch,
 	geometry=geometry,
 	edge_radius=1.4
@@ -162,9 +162,9 @@ print 'Actuator pitch (m)\t', dm.actuator_pitch
 
 """
 newFigure()
-plt.plot(wfs.px[:,0]*wf_sensing.m_per_pix, wfs.px[:,1]*wf_sensing.m_per_pix, 'ro', label="WFS lenslets")
+plt.plot(wfs.px[:,0]*wf_sensing.m_per_px, wfs.px[:,1]*wf_sensing.m_per_px, 'ro', label="WFS lenslets")
 plt.hold(True)
-plt.plot(dm.px[:,0]*wf_sensing.m_per_pix, dm.px[:,1]*wf_sensing.m_per_pix, 'yo', label="DM actuators")
+plt.plot(dm.px[:,0]*wf_sensing.m_per_px, dm.px[:,1]*wf_sensing.m_per_px, 'yo', label="DM actuators")
 plt.xlabel('x (m)')
 plt.ylabel('y (m)')
 plt.legend()
@@ -226,7 +226,7 @@ print 'r0 (sensing) (m)\t', r0_sensing[0]
 
 atm_sensing = pyxao.Atmosphere(
 	sz=sz,
-	m_per_pix=mPerPix,
+	m_per_px=mPerPix,
 	elevations=elevations,
 	v_wind=vWind,
 	r_0=r0_sensing,
@@ -236,7 +236,7 @@ atm_sensing = pyxao.Atmosphere(
 
 atm_science_blue = pyxao.Atmosphere(
 	sz=sz,
-	m_per_pix=mPerPix,
+	m_per_px=mPerPix,
 	elevations=elevations,
 	v_wind=vWind,
 	r_0=r0_science_blue,
@@ -246,7 +246,7 @@ atm_science_blue = pyxao.Atmosphere(
 
 atm_science_red = pyxao.Atmosphere(
 	sz=sz,
-	m_per_pix=mPerPix,
+	m_per_px=mPerPix,
 	elevations=elevations,
 	v_wind=vWind,
 	r_0=r0_science_red,
@@ -255,7 +255,7 @@ atm_science_red = pyxao.Atmosphere(
 	)
 
 """ Calculate the PSF of the telescope """
-psf = findPSF(wf_sensing, plotit=True)
+psf = findPSF(wf_sensing, plotIt=True)
 psf_peak = np.max(psf)
 
 # Adding the atmospheres to the wavefronts
@@ -263,13 +263,12 @@ wf_sensing.add_atmosphere(atm_sensing)
 wf_science_blue.add_atmosphere(atm_science_blue)
 wf_science_red.add_atmosphere(atm_science_red)
 
-# ao.correct_twice(plotit=True)
 ao.run_loop(
 	dt=0.002,
 	nphot=1e4,
 	niter=500,
-	nframesbetweenplots=10,
-	plotit=True,
+	nframesbetweenplots=1,
+	plotIt=True,
 	K_i=1.0,
 	K_leak=0.9
 	)
