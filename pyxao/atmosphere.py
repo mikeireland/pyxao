@@ -17,7 +17,7 @@ class Atmosphere():
     sz: int
         Size (per side) of the atmosphere. NB should be *at least* 2 times larger than the 
         wavefront sensor size.
-    m_per_pix: float
+    m_per_px: float
         meters per pixel in the atmosphere. Must be the same as wavefronts - there is
         a !!!problem!!! with the code that this has to be set in both classes.
     elevations: list of floats
@@ -31,11 +31,11 @@ class Atmosphere():
     r_0: list of floats
         Fried coherence lengths defined at 0.5 microns for each layer
     """
-    def __init__(self,sz = 1024, m_per_pix=0.02,elevations=[10e3,5e3,0],v_wind=[20,10,5],r_0=[.2,.2,.2],angle_wind=[.1,.1,.1],airmass=1.0):
+    def __init__(self,sz = 1024, m_per_px=0.02,elevations=[10e3,5e3,0],v_wind=[20,10,5],r_0=[.2,.2,.2],angle_wind=[.1,.1,.1],airmass=1.0):
         wave_ref = .5e-6 #reference for r_0
         self.nlayers=len(r_0)
         self.sz=sz
-        self.m_per_pix=m_per_pix
+        self.m_per_px=m_per_px
         self.angle_wind = angle_wind
         self.time=0
         # self.elevations = elevations    # AZ
@@ -45,6 +45,7 @@ class Atmosphere():
         if ( (len(elevations) != len(v_wind)) |
             (len(v_wind) != len(r_0)) |
             (len(r_0) != len(angle_wind)) ):
+            pdb.set_trace()
             print("ERROR: elevations, v_wind, r_0 and angle_wind must all be the same length")
             raise UserWarning 
         
@@ -57,7 +58,7 @@ class Atmosphere():
         #Delays in meters at time=0
         self.delays0 = np.empty( (len(r_0),sz,sz) )
         for i in range(self.nlayers): 
-            self.delays0[i] = ot.kmf(sz) * np.sqrt(6.88*(m_per_pix/r_0[i])**(5.0/3.0)) * wave_ref / 2 / np.pi
+            self.delays0[i] = ot.kmf(sz) * np.sqrt(6.88*(m_per_px/r_0[i])**(5.0/3.0)) * wave_ref / 2 / np.pi
         
         #Delays in meters at another time.
         self.delays  = self.delays0.copy()
@@ -71,18 +72,19 @@ class Atmosphere():
         time: float
             Time at which to evolve the atmosphere (seconds)"""
         for i in range(self.nlayers):
-            yshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.sin(self.angle_wind[i])
-            xshift_in_pix = self.v_wind[i]*time/self.m_per_pix*np.cos(self.angle_wind[i])
+            yshift_in_pix = self.v_wind[i]*time/self.m_per_px*np.sin(self.angle_wind[i])
+            xshift_in_pix = self.v_wind[i]*time/self.m_per_px*np.cos(self.angle_wind[i])
             self.delays[i] = nd.interpolation.shift(self.delays0[i],(yshift_in_pix,xshift_in_pix),order=1,mode='wrap')
         
     def propagate_to_ground(self,wave=1e-6,dz=2e2,nprop=50):
+        # AZ: dz is the distance over which to propagate the wavefront.
         """DEMO: Show a pretty movie of the full wavefront being propagated to ground level."""
-        prop = ot.FresnelPropagator(self.sz,self.m_per_pix, dz,wave)
+        prop = ot.FresnelPropagator(self.sz,self.m_per_px, dz,wave)
         field = np.exp(2j*np.pi*self.phasescreens[0]/wave)
         for i in range(nprop):
             field = prop.propagate(field)
             plt.clf()
-            hw = self.sz/2*self.m_per_pix #half-width in metres
+            hw = self.sz/2*self.m_per_px #half-width in metres
             plt.imshow(np.abs(field),cmap=cm.gray,interpolation='nearest',vmax=2,\
                 extent=[-hw,hw,-hw,hw])
             plt.title("Field amplitude after {0:5.1f}m. RMS: {1:5.2f}".format((i+1)*dz, np.std(np.abs(field))))

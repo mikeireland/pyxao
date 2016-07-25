@@ -11,8 +11,7 @@ import scipy.ndimage as nd
 class WFS():
     """This is a base wavefront sensor class. 
     
-    It is the most abstract perfect wavefront
-    sensor, that returns the phase of the wavefront possibly within a mask. """
+    It is the most abstract perfect wavefront sensor, that returns the phase of the wavefront possibly within a mask. """
 
     def __init__(self,wavefronts=[],mask=None):
         self.wavefronts = wavefronts  # AZ
@@ -20,11 +19,19 @@ class WFS():
         self.mask=mask
         self.pix_to_use=np.where(mask)
 
-    def sense(self):
-        if self.mask != None:   # AZ 
-            return np.angle(self.wavefronts[0].field)*self.waves[0]/2/np.pi * self.mask
+    def sense(self, idx=0):
+        """ Simply returns the phase of the idx-th wavefront in the list of wavefronts.
+
+        Parameters
+        ----------
+        idx: int
+            Index of the wavefront in the wavefront sensor's array of wavefronts correspoding to the returned phase.
+        """
+        if self.mask != None:   
+            phase = np.angle(self.wavefronts[idx].field)*self.waves[idx]/2/np.pi
+            return phase * self.mask
         else:
-            return np.angle(self.wavefronts[0].field)*self.waves[0]/2/np.pi
+            return phase
 
 class ShackHartmann(WFS):
     """A Shack-Hartmann wavefront sensor
@@ -37,16 +44,21 @@ class ShackHartmann(WFS):
         wavefront sensor sampling as a multiple of nyquist
     weights: float array
         optional weighting of wavelengths.
+    fratio: float
+        optional f ratio of the lenslet array.
+    sampling: float
+        optional Nyquist sampling of the WFS detector. A value of 1 implies Nyquist sampling; a value of 2 implies oversampling by a factor of 2; etc.
     """
     def __init__(
         self,
         mask=None,
-        geometry='hexagonal',
+        geometry='square',
         wavefronts=[],
         central_lenslet=True,
         lenslet_pitch=0.5,
-        sampling=1.0,
-        plotit=False,
+        sampling=None,   # TODO implement Nyquist sampling!
+        fratio=None,
+        plotIt=False,
         weights=None
         ):
         
@@ -55,12 +67,13 @@ class ShackHartmann(WFS):
             raise UserWarning
         
         self.lenslet_pitch=lenslet_pitch
+        self.central_lenslet=central_lenslet
         
         #Create lenslet geometry
         xpx = []
         ypx = []
         # pixels per subaperture
-        lw = lenslet_pitch/wavefronts[0].m_per_pix
+        lw = lenslet_pitch/wavefronts[0].m_per_px
         nlenslets = int(np.floor(wavefronts[0].sz/lw))
 
         # Hexagonal geometry
@@ -76,6 +89,7 @@ class ShackHartmann(WFS):
 
         # Square geometry        
         elif geometry == 'square':
+            # xpx and ypx give the coordinates of each lenslet
             xpx = np.tile(   wavefronts[0].sz//2 + (np.arange(nlenslets) - nlenslets//2)*lw,nlenslets)
             ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nlenslets) - nlenslets//2)*lw,nlenslets)
             if not central_lenslet:
@@ -90,7 +104,7 @@ class ShackHartmann(WFS):
         good = np.array([wavefronts[0].pupil[int(np.round(p[1])),int(np.round(p[0]))] != 0 for p in px])
         px = px[good]
         self.px=px
-        if plotit:
+        if plotIt:
             #plt.clf()
             plt.plot(px[:,0], px[:,1],'o')
         
@@ -106,34 +120,46 @@ class ShackHartmann(WFS):
         self.nlenslets = px.shape[0]
         # Total number of measurements taken from the wFS
         self.nsense = 3*self.nlenslets #x, y and flux
-        flength_trial = []
-        # Calculate the focal length at each wavelength
-        for wf in wavefronts:
-            # Compute focal length for the SH WFS
-            # D = lenslet pitch (diameter of each lenslet)
-            # f# = f/D, here we assume that f = 1 so f# = 1/D
-            # resolution = wave/D
-            # Each pixel is sampled at Nyquist sampling rate so 1 resolution element = 2 pixels
-            # therefore 2 resolution elements =  wave / D
-            # therefore 1/D = wave/D/wave = 2 resolution elements/wave, hence the line below
-            # Add sampling in here???
-            fratio = 2*wf.m_per_pix/wf.wave
-            # now we can recover the focal length from the pitch (diameter) and the f#
-            flength_trial.append(fratio*lenslet_pitch)
-        # find the maximum focal length corresponding to all wavelengths
-        flength = np.max(flength_trial)
+
+        # If the f ratio of the lenslet array is not specified, then figure it out for a given Nyquist sampling.
+        # The f ratio is set as the input instead of the focal length because we scale everything up to the size of the primary mirror, and so having the user input a focal length may be confusing!
+        if not fratio:
+            if sampling:
+                flength_trial = []
+                # Calculate the focal length at each wavelength
+                for wf in wavefronts:
+                    # Compute focal length for the SH WFS
+                    # D = lenslet pitch (diameter of each lenslet)
+                    # f# = f/D, here we assume that f = 1 so f# = 1/D
+                    # resolution = wave/D
+                    # Each pixel is sampled at Nyquist sampling rate so 1 resolution element = 2 pixels
+                    # therefore 2 resolution elements =  wave / D
+                    # therefore 1/D = wave/D/wave = 2 resolution elements/wave, hence the line below
+                    fratio = 2 * wf.m_per_px / wf.wave * sampling
+                    # now we can recover the focal length from the pitch (diameter) and the f#
+                    flength_trial.append(fratio * lenslet_pitch)
+                # find the maximum focal length corresponding to all wavelengths
+                flength = np.max(flength_trial)
+            else:
+                print("ERROR: you must either specify the fratio or sampling parameters for the WFS!")
+                raise UserWarning
+        else:
+            if sampling:
+                print("WARNING: ignoring sampling parameter as fratio has been specified...")
+            flength = fratio * lenslet_pitch
 
         self.flength=flength
         self.pupils=[]
         for wf in wavefronts:
             self.waves.append(wf.wave)
+            # TODO: I think this is a bug?
             self.propagator_ixs.append(len(wf.propagators))
             wf.add_propagator(flength)
             # Now the tricky bit... make lots of hexagons!
-            # np.zeros returns an array of type dtype
             pupil = np.zeros( (wf.sz,wf.sz),dtype=np.complex)
             # Make a curved wavefront corresponding to the wavefront over each subaperture.
-            one_lenslet = ot.curved_wf(wf.sz,wf.m_per_pix,f_length=flength,wave=wf.wave)
+            # Note that the pupil is actually a complex function because it's a lens - it modifies the wavefront!
+            one_lenslet = ot.curved_wf(wf.sz,wf.m_per_px,f_length=flength,wave=wf.wave)
             # Maksing each wavefront to the shape of the subapertures.
             if geometry == 'hexagonal':
                 one_lenslet *= ot.utils.hexagon(wf.sz,lw)
@@ -154,10 +180,13 @@ class ShackHartmann(WFS):
             nonzero = np.abs(pupil) > 0
             pupil[nonzero] /= np.abs(pupil)[nonzero]
             self.pupils.append(pupil)
-        #Create a perfect set of WFS outputs.
+
+        # Create a perfect set of WFS outputs with no atmosphere.
         for wf in wavefronts:
-            wf.field=wf.pupil
-        # Get the wavefront sensed by the WFS.
+            # wf.field = wf.pupil
+            wf.flatten_field()
+
+        # Get the wavefront sensed by the WFS. At this point the wavefronts have been reset and so all spots lie at the centre of their subapertures. This variable is used in sense() if the desired centroid output format to be specified w.r.t. their nominal positions.
         self.sense_perfect = self.sense(subtract_perfect=False)
             
     def sense(self,mode='gauss_weighted',
@@ -168,6 +197,8 @@ class ShackHartmann(WFS):
             dclamp=10,
             subtract_perfect=True):
         """Sense the tilt and flux modes.
+
+        TODO: modify this so that it doesn't change the field variable in the wavefront instances...
         
         Parameters
         ----------
@@ -195,16 +226,22 @@ class ShackHartmann(WFS):
             in pixel or normalised logarithmic flux units.
         """
         sz = self.wavefronts[0].sz
-        self.im = np.zeros( (sz,sz) )
+        self.im = np.zeros((sz,sz))
 
         # Compute the image appearing on the WFS detector.
         for i in range(len(self.wavefronts)):
+            # Make a temporary copy of the field so that we can restore it after propgation.
+            original_field = self.wavefronts[i].field
+            
             # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
             # Then propagate (Huygens propagation)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
             # Add the image component of that wavelength to the final image.
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
+
+            # Restore the field.
+            self.wavefronts[i].field = original_field
         
         # If the photon number is set, then we add noise.
         if nphot:
@@ -281,7 +318,7 @@ class APNLWFS(WFS):
         if not masks:
             masks = np.empty( (len(wave),2,sz,sz),dtype=np.complex)
             for i in range(len(wave)):
-                masks[i,:,:,:] = ot.diversity_mask(self.sz,self.m_per_pix[i])
+                masks[i,:,:,:] = ot.diversity_mask(self.sz,self.m_per_px[i])
         if not pupil:
             pupil = ot.gmt(sz,m_pix=self.m_pix)
         if len(pupil.shape)==1:
