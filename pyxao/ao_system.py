@@ -1,5 +1,6 @@
 from __future__ import division, print_function
 from pyxao import *
+import apdsim
 import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
@@ -261,16 +262,18 @@ class SCFeedBackAO():
                 nphot = None,
                 mode = 'integrator',
                 niter = 100,
-                nframesbetweenplots = 10,
-                plotIt = False,
                 K_p = None,
                 K_i = None,
                 K_d = None,
                 K_leak = 0.9,
                 psf_ix = 0,
                 psf_sz_cropped = None,
-                plate_scale_as_px = None,
-                detector_size_px = (100,100)    # For now this is only used in plotting
+                normalise_psf = True,
+                plate_scale_as_px = None,        # Plate scale of the output images/PSFs
+                detector_size_px = (256,320),    # For now this is only used in plotting
+                nframesbetweenplots = 10,
+                plotIt = False,
+                im_input = None                 # Input image that we convolve with the PSF at the wavelength corresponding to psf_ix. For now it must have the same plate scale as plate_scale_as_px.
                 ):
         """Run an AO servo loop.
         
@@ -318,38 +321,50 @@ class SCFeedBackAO():
         y_current = np.zeros(self.wfs.nsense)    # timestep k
         y_old = np.zeros(self.wfs.nsense)        # timestep k - 1
 
-        # Size of the largest image that will be generated.
+        # Size of the largest image that will be generated.        
+        N_science_imgs = len(self.image_ixs)
         imsize = 0
         for ix in self.image_ixs:
           imsize = max(imsize, self.dm.wavefronts[ix].image(plate_scale_as_px=plate_scale_as_px).shape[0])  
-
-        # Image averaged over all AO loop iterations.
-        im_mean = np.zeros((imsize, imsize))
+        
+        
 
         # Size of the uncropped PSF image.
         psf_sz = self.dm.wavefronts[psf_ix].image(plate_scale_as_px=plate_scale_as_px).shape[0]
         # Oversampling factor of the PSF. Note that N_OS is equivalent to the 'sigma' of the pupil image in the DL.
         plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
         N_OS = self.dm.wavefronts[psf_ix].wave / self.dm.wavefronts[psf_ix].D / 2 / plate_scale_rad_px
-        # pdb.set_trace()
-        # How many 'sigmas' we want the returned PSF grid to encompass. TODO: is there a better way of doing this?
+        # How many 'sigmas' we want the returned PSF grid to encompass.
         if not psf_sz_cropped:
             psf_sigma_limit_px = 8   
             psf_sz_cropped = np.ceil(min(psf_sz, 2 * N_OS * psf_sigma_limit_px))
         else:
             psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))
-        psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))
         
-       # Diffraction-limited 'perfect' image.
-        im_perfect = np.zeros((imsize,imsize))
+        # Arrays to hold images
+        psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))# at the psf_ix wavelength
+        psf_mean = np.zeros((psf_sz_cropped, psf_sz_cropped))           # at the psf_ix wavelength
+        psf_mean_all = np.zeros((imsize, imsize))   # sum over all wavelengths
+        psf_perfect = np.zeros((imsize,imsize))     # sum over all wavelengths
+        psf_science = np.zeros((len(self.image_ixs), imsize, imsize))   # separated into wavelength, per iteration
+        psf_science_all = np.zeros((imsize, imsize)) # sum over all wavelengths, per iteration
+        if im_input is not None:
+            # If the image size is actually smaller than the detector, then we make the detector this size too.
+            detector_size_px = (min(im_input.shape[0], detector_size_px[0]), min(im_input.shape[1], detector_size_px[1]))
+            im_mean = np.zeros(detector_size_px)    # at the psf_ix wavelength
+            ims_science = np.zeros((niter, detector_size_px[0], detector_size_px[1]))    # at the psf_ix wavelength
+            im_input_cropped = mu.centreCrop(im_input, detector_size_px)    # Cropped to detector size
+
+        # Diffraction-limited 'perfect' PSF.        
         for ix in self.image_ixs:
             # Reset the field to a flat wavefront.
             # self.dm.wavefronts[ix].field = self.dm.wavefronts[ix].pupil
             # im = self.dm.wavefronts[ix].image()
-            im = self.dm.wavefronts[ix].psf_dl()
-            pad_x = (imsize - im.shape[0])//2
-            pad_y = (imsize - im.shape[1])//2
-            im_perfect[pad_x:pad_x + im.shape[0],pad_y:pad_y + im.shape[1]] += im   
+            psf_dl = self.dm.wavefronts[ix].psf_dl()
+            pad_x = (imsize - psf_dl.shape[0])//2
+            pad_y = (imsize - psf_dl.shape[1])//2
+            psf_perfect[pad_x:pad_x + psf_dl.shape[0],pad_y:pad_y + psf_dl.shape[1]] += psf_dl  
+
 
         """ AO Control loop """
         # At this point, the field variables all include the atmosphere.
@@ -387,73 +402,289 @@ class SCFeedBackAO():
 
             coefficients_current = coefficients_next;
 
-            # Create the image. By FFT for now...
-            im_science = np.zeros((len(self.image_ixs), imsize, imsize))
-            im_science_all = np.zeros((imsize, imsize))
-            for ix in self.image_ixs:
-                im = self.dm.wavefronts[ix].image(plate_scale_as_px = plate_scale_as_px)                
+            # Create the PSFs. By FFT for now...
+            psf_science_all = np.zeros(psf_science_all.shape)
+            psf_science = np.zeros(psf_science.shape)
+            for i in range(N_science_imgs):
+                ix = self.image_ixs[i]
+                psf = self.dm.wavefronts[ix].image(plate_scale_as_px = plate_scale_as_px)                
                 # Saving the PSF.
                 if ix == psf_ix:
-                    psfs_cropped[k] = mu.centreCrop(im, psf_sz_cropped)
+                    psfs_cropped[k] = mu.centreCrop(psf, psf_sz_cropped)
                     if normalise_psf:
                         psfs_cropped[k] /= sum(psf_sz_cropped.flatten())
-                pad_x = (imsize - im.shape[0])//2
-                pad_y = (imsize - im.shape[1])//2       
-                im_science[ix,pad_x:pad_x + im.shape[0],pad_y:pad_y + im.shape[1]] = im  # Science images separated into different wavelengths
-                im_science_all += im_science[ix]   # Stacked science image            
-
-            # Update the mean image.
+                pad_x = (imsize - psf.shape[0])//2
+                pad_y = (imsize - psf.shape[1])//2       
+                psf_science[i,pad_x:pad_x + psf.shape[0], pad_y:pad_y + psf.shape[1]] = psf  # Science images separated into different wavelengths
+                psf_science_all += psf_science[i]   # Stacked science image            
+            
+            # Update the mean PSF.
             if (k != 0):
-                im_mean += im_science_all 
+                psf_mean += psfs_cropped[k]
+                psf_mean_all += psf_science_all  
+
+            # Create the science image, if required.
+            # The science image is im_input (cropped to the detector size) convolved with the PSF corresponding to psf_ix.
+            if im_input is not None:
+                # pdb.set_trace()
+                im_science = apdsim.convolvePSF(image = im_input_cropped, psf = psfs_cropped[k])
+                ims_science[k] = im_science
+                # Update the mean image.
+                if (k != 0):
+                    im_mean += im_science           
                  
             #------------------ PLOTTING ------------------#
             if plotIt & ((k % nframesbetweenplots) == 0):                  
                 if k == 0:
                     axes = []
                     plots = []
-                    N_science_imgs = len(self.image_ixs)
+                    if im_input is not None:
+                        fig_width = 4
+                    else:
+                        fig_width = 3
                     plt.rc('text', usetex=True)
 
-                    # WFS plot                    
-                    fig_wfs = mu.newfigure(2,2)
-                    ax_wfs = fig_wfs.add_subplot(111)  # WFS detector image
-                    ax_wfs.title.set_text(r'WFS detector')
-                    ax_wfs.axis( [0,self.dm.wavefronts[0].sz,0,self.dm.wavefronts[0].sz] )
-                    plot_wfs = ax_wfs.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
-
-                    fig = mu.newfigure(width=2,height=N_science_imgs)
+                    fig = mu.newfigure(width=fig_width,height=N_science_imgs)
                     
                     for j in range(N_science_imgs):
+                        # WFS 
+                        axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+1)) 
+                        axes[-1].title.set_text(r'Wavefront sensor detector image')
+                        plots.append(axes[-1].imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray))
+                        mu.colourbar(plots[-1])
+
                         # Phase
-                        axes.append(fig.add_subplot(N_science_imgs,2,2*j+1)) 
+                        # Get the current phase for plotting.
+                        phase_current = np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil
+                        axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+2)) 
                         axes[-1].title.set_text(r'Corrected phase ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
-                        plots.append(axes[-1].imshow(np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
+                        plots.append(axes[-1].imshow(phase_current,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
                         mu.colourbar(plots[-1])
+
+                        # PSF
+                        axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+3))  
+                        axes[-1].title.set_text(r'Point spread function ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
+                        psf_cropped = mu.centreCrop(psf_science[j], detector_size_px)
+                        plots.append(axes[-1].imshow(psf_cropped,interpolation='nearest', cmap=cm.gist_heat))
+                        mu.colourbar(plots[-1])
+
                         # Science image
-                        axes.append(fig.add_subplot(N_science_imgs,2,2*j+2))  
-                        axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
-                        pad_x = max((imsize - detector_size_px[0]) // 2, 0)
-                        pad_y = max((imsize - detector_size_px[1]) // 2, 0)
-                        im_cropped = im_science[j,pad_x:pad_x + min(imsize, detector_size_px[0]),pad_y:pad_y + min(imsize, detector_size_px[1])]
-                        plots.append(axes[-1].imshow(im_cropped,interpolation='nearest', cmap=cm.gist_heat, norm=LogNorm()))
-                        mu.colourbar(plots[-1])
+                        if im_input is not None and psf_ix == self.image_ixs[j]:
+                            axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+4))  
+                            axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))           
+                            plots.append(axes[-1].imshow(im_science, interpolation='nearest', cmap=cm.gist_heat))
+                            mu.colourbar(plots[-1])
                 else:
-                    # Update the plots
-                    plot_wfs.set_data(self.wfs.im)  
-                    fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, K_i, K_leak))
+                    if K_i == 0 and K_leak == 0:
+                        fig.suptitle(r'Open loop phase and science images, $k = %d$' % k)
+                    else:
+                        fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, K_i, K_leak))
                     for j in range(N_science_imgs):
-                        plots[2*j].set_data(np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil)
-                        pad_x = max((imsize - detector_size_px[0]) // 2, 0)
-                        pad_y = max((imsize - detector_size_px[1]) // 2, 0)
-                        im_cropped = im_science[j,pad_x:pad_x + min(imsize, detector_size_px[0]),pad_y:pad_y + min(imsize, detector_size_px[1])]
-                        plots[2*j+1].set_data(im_cropped)
+                        # Update WFS
+                        plots[2*j].set_data(self.wfs.im)
+                        # Update phase
+                        phase_current = np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil
+                        plots[2*j+1].set_data(phase_current)
+                        # Update PSF. Crop it to the detector size first 
+                        psf_cropped = mu.centreCrop(psf_science[j], detector_size_px)
+                        plots[2*j+2].set_data(psf_cropped)
+                        # Update image
+                        if im_input is not None:
+                            plots[2*j+3].set_data(im_science)
 
                 plt.draw()
                 plt.pause(0.00001)  # Need this to plot on some machines.
             #---------------------------------------------#
 
         # Determine the mean image.
-        im_mean /= niter
+        psf_mean /= niter            
 
-        return psfs_cropped, im_mean, im_perfect
+        if im_input is not None:
+            im_mean /= niter
+            return psfs_cropped, ims_science, psf_mean, im_mean, psf_perfect
+        else:
+            return psfs_cropped, psf_mean, psf_perfect
+
+    def open_loop(self, dt,
+                niter = 100,
+                psf_ix = 0,
+                psf_sz_cropped = None,
+                normalise_psf = True,
+                plate_scale_as_px = None,        # Plate scale of the output images/PSFs
+                detector_size_px = (200,200),    # For now this is only used in plotting
+                nframesbetweenplots = 10,
+                plotIt = False,
+                im_input = None                 # Input image that we convolve with the PSF at the wavelength corresponding to psf_ix. For now it must have the same plate scale as plate_scale_as_px.
+                ):
+        """Open the loop and let run.
         
+        It is assumed that all wavefronts share the same atmosphere!
+        
+        Parameters
+        ----------
+        dt: float
+            Time between samples
+        nphot: float
+            Number of photons per frame (noise)
+        niter: int
+            Number of iterations of the loop.
+        plotIt: boolean
+            Do we plot potentially useful outputs? NB, this is all pretty slow with
+            matplotlib.
+        psf_ix: int
+            Index in self.image_ixs corresponding to the wavelength of the PSF to be returned.
+        plate_scale_as_px: float
+            Plate scale for the output science images and PSFs. For now, only put in the plate scale instead of the Nyquist sampling because we image at a range of wavelengths with the same detector.
+        """
+
+        # Size of the largest image that will be generated.        
+        N_science_imgs = len(self.image_ixs)
+        imsize = 0
+        for ix in self.image_ixs:
+          imsize = max(imsize, self.dm.wavefronts[ix].image(plate_scale_as_px=plate_scale_as_px).shape[0])  
+
+        # Size of the uncropped PSF image.
+        psf_sz = self.dm.wavefronts[psf_ix].image(plate_scale_as_px=plate_scale_as_px).shape[0]
+        
+        # Oversampling factor of the PSF. Note that N_OS is equivalent to the 'sigma' of the pupil image in the DL.
+        # The oversampling factor is determined by the plate scale (not the other way around!!!)
+        plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
+        N_OS = self.dm.wavefronts[psf_ix].wave / self.dm.wavefronts[psf_ix].D / 2 / plate_scale_rad_px
+        if N_OS < 1:
+            print("WARNING: the output PSFs are undersampled at a plate scale of %.5f arcsec/pixel with N_OS = %.5f" % (plate_scale_as_px, N_OS))
+        else:
+            print("The output PSFs are sampled at a plate scale of %.5f arcsec/pixel with N_OS = %.5f" % (plate_scale_as_px, N_OS))
+        
+        # How many 'sigmas' we want the returned PSF grid to encompass.
+        if not psf_sz_cropped:
+            psf_sigma_limit_px = 16   
+            psf_sz_cropped = np.ceil(min(psf_sz, 2 * N_OS * psf_sigma_limit_px))
+        else:
+            psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))
+        
+        # Arrays to hold images
+        psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))# at the psf_ix wavelength
+        psf_mean = np.zeros((psf_sz_cropped, psf_sz_cropped))           # at the psf_ix wavelength
+        psf_mean_all = np.zeros((imsize, imsize))   # sum over all wavelengths
+        psf_perfect = np.zeros((imsize,imsize))     # sum over all wavelengths
+        psf_science = np.zeros((len(self.image_ixs), imsize, imsize))   # separated into wavelength, per iteration
+        psf_science_all = np.zeros((imsize, imsize)) # sum over all wavelengths, per iteration
+        if im_input is not None:
+            # If the image size is actually smaller than the detector, then we make the detector this size too.
+            detector_size_px = (min(im_input.shape[0], detector_size_px[0]), min(im_input.shape[1], detector_size_px[1]))
+            im_mean = np.zeros(detector_size_px)    # at the psf_ix wavelength
+            ims_science = np.zeros((niter, detector_size_px[0], detector_size_px[1]))    # at the psf_ix wavelength
+            im_input_cropped = mu.centreCrop(im_input, detector_size_px)    # Cropped to detector size
+
+        # Diffraction-limited 'perfect' PSF.        
+        for ix in self.image_ixs:
+            # Reset the field to a flat wavefront.
+            psf_dl = self.dm.wavefronts[ix].psf_dl()
+            pad_x = (imsize - psf_dl.shape[0])//2
+            pad_y = (imsize - psf_dl.shape[1])//2
+            psf_perfect[pad_x:pad_x + psf_dl.shape[0],pad_y:pad_y + psf_dl.shape[1]] += psf_dl  
+
+
+        """ AO Control loop """
+        # At this point, the field variables all include the atmosphere.
+        # Order in loop should be 
+        # apply atmosphere --> apply DM correction --> capture images --> sense wavefront
+        for k in range(niter):  
+
+            # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.          
+            for wf in self.dm.wavefronts:                
+                wf.atm.evolve(dt * k)   # This doesn't affect the field variable.
+                wf.atm_field()          # Now, the wavefront fields include only the atmosphere.
+
+            # Create the PSFs. By FFT for now...
+            psf_science_all = np.zeros(psf_science_all.shape)
+            psf_science = np.zeros(psf_science.shape)
+            for i in range(N_science_imgs):
+                ix = self.image_ixs[i]
+                psf = self.dm.wavefronts[ix].image(plate_scale_as_px = plate_scale_as_px)                
+                # Saving the PSF.
+                if ix == psf_ix:
+                    # Crop to the desired output size of the PSF.
+                    psfs_cropped[k] = mu.centreCrop(psf, psf_sz_cropped)
+                    # Normalise the PSF if necessary.
+                    if normalise_psf:
+                        psfs_cropped[k] /= sum(psfs_cropped[k].flatten())
+                # Storing the PSF in the array of PSFs and adding it to the stacked PSF image.
+                pad_x = (imsize - psf.shape[0])//2
+                pad_y = (imsize - psf.shape[1])//2       
+                psf_science[i,pad_x:pad_x + psf.shape[0], pad_y:pad_y + psf.shape[1]] = psf  # Science images separated into different wavelengths
+                psf_science_all += psf_science[i]   # Stacked science image            
+            
+            # Update the mean PSF.
+            if (k != 0):
+                psf_mean += psfs_cropped[k]
+                psf_mean_all += psf_science_all  
+
+            # Create the science image, if required.
+            # The science image is im_input (cropped to the detector size) convolved with the PSF corresponding to psf_ix.
+            if im_input is not None:
+                im_science = apdsim.convolvePSF(image = im_input_cropped, psf = psfs_cropped[k])
+                ims_science[k] = im_science
+                # Update the mean image.
+                if (k != 0):
+                    im_mean += im_science           
+                 
+            #------------------ PLOTTING ------------------#
+            if plotIt & ((k % nframesbetweenplots) == 0):                  
+                if k == 0:
+                    axes = []
+                    plots = []
+                    if im_input is not None:
+                        fig_width = 3
+                    else:
+                        fig_width = 2
+                    plt.rc('text', usetex=True)
+
+                    fig = mu.newfigure(width=fig_width,height=N_science_imgs)
+                    
+                    for j in range(N_science_imgs):
+                        # Phase
+                        # Get the current phase for plotting.
+                        phase_current = np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil
+                        axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+1)) 
+                        axes[-1].title.set_text(r'Wavefront phase ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
+                        plots.append(axes[-1].imshow(phase_current,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
+                        mu.colourbar(plots[-1])
+
+                        # PSF
+                        axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+2))  
+                        axes[-1].title.set_text(r'Point spread function ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))
+                        psf_cropped = mu.centreCrop(psf_science[j], detector_size_px)
+                        plots.append(axes[-1].imshow(psf_cropped,interpolation='nearest', cmap=cm.gist_heat))
+                        mu.colourbar(plots[-1])
+
+                        # Science image
+                        if im_input is not None and psf_ix == self.image_ixs[j]:
+                            axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+3))  
+                            axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))           
+                            plots.append(axes[-1].imshow(im_science, interpolation='nearest', cmap=cm.gist_heat))
+                            mu.colourbar(plots[-1])
+                else:
+                    fig.suptitle(r'Open loop phase and science images, $k = %d$' % k)
+                    for j in range(N_science_imgs):
+                        phase_current = np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil
+                        plots[2*j].set_data(phase_current)
+                        # Update PSF. Crop it to the detector size first 
+                        psf_cropped = mu.centreCrop(psf_science[j], detector_size_px)
+                        plots[2*j+1].set_data(psf_cropped)
+                        # Update image
+                        if im_input is not None:
+                            plots[2*j+2].set_data(im_science)
+
+                plt.draw()
+                plt.pause(0.00001)  # Need this to plot on some machines.
+            #---------------------------------------------#
+
+        # Determine the mean image.
+        psf_mean /= niter            
+
+        if im_input is not None:
+            im_mean /= niter
+            return psfs_cropped, ims_science, psf_mean, im_mean, psf_perfect
+        else:
+            return psfs_cropped, psf_mean, psf_perfect
