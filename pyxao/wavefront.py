@@ -49,6 +49,9 @@ class Wavefront():
         if ptype == "annulus":
             self.pupil = ot.utils.circle(self.sz, pupil['dout']/self.m_per_px) - ot.utils.circle(self.sz, pupil['din']/self.m_per_px)
             self.D = pupil['dout']
+        if ptype == "square":
+            self.pupil = ot.utils.square(self.sz, pupil['dout']/self.m_per_px) - ot.utils.square(self.sz, pupil['din']/self.m_per_px)
+            self.D = pupil['dout']
         else:
             print("Invalid pupil 'type' keyword!")
 
@@ -195,7 +198,6 @@ class Wavefront():
             fftpad = 2
         elif plate_scale_as_px:
             plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
-            #TODO fix this
             fftpad = self.wave / self.D / plate_scale_rad_px   # padding factor
         else:
             fftpad = 2 * nyquist_sampling
