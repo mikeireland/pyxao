@@ -227,35 +227,6 @@ class SCFeedBackAO():
             plt.imshow(im2)
             plt.title('After second correction')
 
-            """
-            # Sanity check to see how the field changes between calls of 
-            # pupil_field(). (hint: it doesn't)
-
-            plt.subplot(131)
-            plt.imshow(field0.real)
-            plt.title('field0')
-            plt.subplot(132)
-            plt.imshow(field1.real)
-            plt.title('field1')
-            plt.subplot(133)
-            plt.imshow((field1-field0).real)
-            plt.title('field1-field0')
-            plt.colorbar()
-            """
-
-            """
-            plt.figure()
-            plt.suptitle('WFS detector image changes')
-            plt.subplot(121)
-            plt.imshow(im1-im0)
-            plt.title('im1 - im0')
-            plt.colorbar()
-            plt.subplot(122)
-            plt.imshow(im2-im1)
-            plt.title('im2 - im1')
-            plt.colorbar()
-            """
-
         return [measurements0,measurements1,measurements2],[im0,im1,im2] 
         
     def run_loop(self, dt, 
@@ -557,8 +528,8 @@ class SCFeedBackAO():
         
         # How many 'sigmas' we want the returned PSF grid to encompass.
         if not psf_sz_cropped:
-            psf_sigma_limit_px = 16   
-            psf_sz_cropped = np.ceil(min(psf_sz, 2 * N_OS * psf_sigma_limit_px))
+            trunc_sigma = 10.25   
+            psf_sz_cropped = np.ceil(min(psf_sz, 4 * N_OS * trunc_sigma))
         else:
             psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))
         
