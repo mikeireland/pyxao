@@ -51,23 +51,27 @@ class ShackHartmann(WFS):
     """
     def __init__(
         self,
-        mask=None,
-        geometry='square',
-        wavefronts=[],
-        central_lenslet=True,
-        lenslet_pitch=0.5,
-        sampling=None,   # TODO implement Nyquist sampling!
-        fratio=None,
+        lenslet_pitch,
+        geometry,
+        central_lenslet,
+        mask = None,
+        wavefronts = [],
+        sampling = None,   # TODO implement Nyquist sampling!
+        fratio = None,
         plotIt=False,
-        weights=None
+        weights=None,
+        RN = 0,       # read noise
+        N_phot = 0    # photon noise
         ):
         
         if len(wavefronts)==0:
             print("ERROR: Must initialise the ShackHartmann with a wavefront list")
             raise UserWarning
         
-        self.lenslet_pitch=lenslet_pitch
-        self.central_lenslet=central_lenslet
+        self.lenslet_pitch = lenslet_pitch
+        self.central_lenslet = central_lenslet
+        self.N_phot = N_phot
+        self.RN = RN
         
         #Create lenslet geometry
         xpx = []
@@ -183,7 +187,6 @@ class ShackHartmann(WFS):
 
         # Create a perfect set of WFS outputs with no atmosphere.
         for wf in wavefronts:
-            # wf.field = wf.pupil
             wf.flatten_field()
 
         # Get the wavefront sensed by the WFS. At this point the wavefronts have been reset and so all spots lie at the centre of their subapertures. This variable is used in sense() if the desired centroid output format to be specified w.r.t. their nominal positions.
@@ -192,8 +195,8 @@ class ShackHartmann(WFS):
     def sense(self,mode='gauss_weighted',
             window_hw=5, 
             window_fwhm=5.0, 
-            nphot=None, 
-            rnoise=1.5,
+            # N_phot=None, 
+            # RN=1.5,
             dclamp=10,
             subtract_perfect=True):
         """Sense the tilt and flux modes.
@@ -202,8 +205,8 @@ class ShackHartmann(WFS):
         
         Parameters
         ----------
-        nphot: float
-        rnoise: float
+        N_phot: float
+        RN: float
         mode: string
             NOT IMPLEMENTED YET
         window_hw: int
@@ -211,7 +214,7 @@ class ShackHartmann(WFS):
         window_fwhm: float
             Full-width half-maximum of the weighting window used to extract each
             lenslet
-        rnoise: float
+        RN: float
             Readout noise in electrons.
         dclamp: float
             Denominator clamping value. Gain is reduced for subaperture fluxes below this
@@ -244,10 +247,11 @@ class ShackHartmann(WFS):
             self.wavefronts[i].field = original_field
         
         # If the photon number is set, then we add noise.
-        if nphot:
-            self.im = self.im/np.sum(self.im)*nphot
+        if self.N_phot > 0:
+            self.im = self.im/np.sum(self.im)*self.N_phot
             self.im = np.random.poisson(self.im).astype(float)
-            self.im += np.random.normal(scale=rnoise,size=self.im.shape)
+        if self.RN > 0:
+            self.im += np.random.normal(scale=self.RN,size=self.im.shape)
         
         # Now sense the centroids.
         xx = np.arange(2*window_hw + 1) - window_hw
@@ -271,7 +275,7 @@ class ShackHartmann(WFS):
 
             # Sum of all pixel intensities in the subaperture (denominator of the centroid calc)
             xyf[2,i] = np.sum(subim*gg)
-            if nphot:
+            if self.N_phot > 0:
                 denom = np.maximum(xyf[2,i],dclamp)
             else:
                 denom = xyf[2,i]
@@ -283,7 +287,7 @@ class ShackHartmann(WFS):
         #The flux variable only has any meaning with respect to the mean. 
         #A logarithm should also be taken so that differences to a perfect image
         #are meaningful.
-        if nphot:
+        if self.N_phot > 0:
             denom = np.maximum(np.mean(xyf[2]),dclamp)
         else:
             denom = np.mean(xyf[2])
