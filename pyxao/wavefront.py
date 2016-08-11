@@ -12,9 +12,9 @@ try:
     import pyfftw
     pyfftw.interfaces.cache.enable()
     pyfftw.interfaces.cache.set_keepalive_time(1.0)
-    nthreads=6 
+    nthreads = 4 
 except:
-    nthreads=0
+    nthreads = 0
 
 
 class Wavefront():
@@ -49,7 +49,7 @@ class Wavefront():
         if ptype == "annulus":
             self.pupil = ot.utils.circle(self.sz, pupil['dout']/self.m_per_px) - ot.utils.circle(self.sz, pupil['din']/self.m_per_px)
             self.D = pupil['dout']
-        if ptype == "square":
+        elif ptype == "square":
             self.pupil = ot.utils.square(self.sz, pupil['dout']/self.m_per_px) - ot.utils.square(self.sz, pupil['din']/self.m_per_px)
             self.D = pupil['dout']
         else:
@@ -167,7 +167,7 @@ class Wavefront():
         self.field *= self.pupil
 
     def image(self, 
-        nyquist_sampling = None,
+        N_OS = None,
         plate_scale_as_px = None,
         return_efield = False,
         plotIt = False
@@ -178,29 +178,29 @@ class Wavefront():
         ----------
         return_efield: boolean
             Do we return an electric field? If not, return the intensity.
-        nyquist_sampling: float
+        N_OS: float
             How to sample the image. A sampling factor of 1.0 implies Nyquist sampling at this wavefront's wavelength: i.e. the plate scale in the image, f_x = wavelength / 2D (i.e. 2 pixels across the FWHM). A sampling factor of 2.0 implies twice this resolution, etc.
         plate_scale_as_px: float
             The plate scale of the final image. 
 
-            Only neither or one of nyquist_sampling and plate_scale_as_px must be specified.
+            Only neither or one of N_OS and plate_scale_as_px must be specified.
 
             TODO: resample the pupil if the fftpad < 1.
             When fftpad = 1, this corresponds to 1 pixel across the FWHM. This is independent of N.
             """
 
         # Padding the image to obtain the appropriate plate scale or sampling for the given wavelength.
-        if nyquist_sampling and plate_scale_as_px:
+        if N_OS and plate_scale_as_px:
             print("ERROR: Nyquist sampling and plate scale cannot both be specified!")
             raise UserWarning
-        if not nyquist_sampling and not plate_scale_as_px:
+        if not N_OS and not plate_scale_as_px:
             # By default, we want to Nyquist sample (2 pixels per FWHM)
             fftpad = 2
         elif plate_scale_as_px:
             plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
             fftpad = self.wave / self.D / plate_scale_rad_px   # padding factor
         else:
-            fftpad = 2 * nyquist_sampling
+            fftpad = 2 * N_OS
     
         # total padded side length 
         N = np.ceil(self.sz * fftpad).astype(np.int)  
@@ -256,7 +256,7 @@ class Wavefront():
             return irr
 
     def psf_dl(self, 
-        nyquist_sampling = None,
+        N_OS = None,
         plate_scale_as_px = None,
         plotIt = False,
         return_efield = False
@@ -272,9 +272,8 @@ class Wavefront():
         self.flatten_field()
 
         # The PSF is then simply the FFT of the pupil.
-        psf = self.image(nyquist_sampling = nyquist_sampling,
-        plate_scale_as_px = plate_scale_as_px, return_efield = return_efield)
-
+        psf = self.image(N_OS = N_OS, plate_scale_as_px = plate_scale_as_px, return_efield = return_efield)
+        psf /= sum(psf.flatten())
         if plotIt:
             axesScale = [0, self.sz*self.m_per_px, 0, self.sz*self.m_per_px]
             plt.figure()
