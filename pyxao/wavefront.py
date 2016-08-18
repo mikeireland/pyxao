@@ -6,6 +6,7 @@ import scipy.ndimage as nd
 import pdb
 import time
 import pdb
+from linguinesim.apdsim import resizeImageToDetector
 plt.ion()
 
 try:
@@ -200,7 +201,11 @@ class Wavefront():
             plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
             fftpad = self.wave / self.D / plate_scale_rad_px   # padding factor
         else:
-            fftpad = 2 * N_OS
+            if N_OS >= 1:
+                fftpad = 2 * N_OS
+            else:
+                # If N_OS < 1, then we need to generate the image at a higher resolution and then downsample it. 
+                fftpad = 2
     
         # total padded side length 
         N = np.ceil(self.sz * fftpad).astype(np.int)  
@@ -244,6 +249,13 @@ class Wavefront():
             efield = np.fft.fftshift(efield)
 
         irr = np.abs(efield)**2 # Irradiance
+
+        # Downsampling if required.
+        if N_OS < 1:
+            irr = resizeImageToDetector(image_raw = irr, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
+            efield_re = resizeImageToDetector(image_raw = efield.real, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
+            efield_imag = resizeImageToDetector(image_raw = efield.imag, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
+            efield = efield_re + 1j * efield_imag
 
         if plotIt:
             plt.figure()
