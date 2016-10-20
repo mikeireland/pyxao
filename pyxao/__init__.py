@@ -12,11 +12,7 @@ plt.ion()
 
 import miscutils as mu
 
-from wfs import *
-from atmosphere import *
-from wavefront import *
-from deformable_mirror import *
-from ao_system import *
+TENTH_AIRY_RING = 10.25
 
 # These below should go in a demo program...
 
