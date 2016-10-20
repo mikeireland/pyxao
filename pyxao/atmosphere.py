@@ -42,6 +42,13 @@ class Atmosphere():
         seed=None
         ): 
 
+        # Convert to lists if necessary
+        if np.isscalar(elevations) and np.isscalar(v_wind) and np.isscalar(r_0) and np.isscalar(angle_wind):
+            r_0 = [r_0]
+            v_wind = [v_wind]
+            elevations = [elevations]
+            angle_wind = [angle_wind]
+
         self.nlayers=len(r_0)
         self.sz=sz
         self.m_per_px=m_per_px
