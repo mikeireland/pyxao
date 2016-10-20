@@ -6,7 +6,7 @@ import scipy.ndimage as nd
 import pdb
 import time
 import pdb
-from linguinesim.apdsim import resizeImageToDetector
+from linguinesim.obssim import resizeImageToDetector
 plt.ion()
 
 try:
@@ -200,6 +200,7 @@ class Wavefront():
         elif plate_scale_as_px:
             plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
             fftpad = self.wave / self.D / plate_scale_rad_px   # padding factor
+            N_OS = fftpad / 2
         else:
             if N_OS >= 1:
                 fftpad = 2 * N_OS
