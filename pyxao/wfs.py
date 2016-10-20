@@ -64,6 +64,10 @@ class ShackHartmann(WFS):
         N_phot = 0    # photon noise
         ):
         
+        # What do we need to know?
+        #   - the Nyquist sampling (N_OS) of the wavefront sensor, given by
+        #           N_OS = wavelength / 2 / D_subap / plate_scale_rad
+
         if len(wavefronts)==0:
             print("ERROR: Must initialise the ShackHartmann with a wavefront list")
             raise UserWarning
@@ -241,7 +245,12 @@ class ShackHartmann(WFS):
             # Then propagate (Huygens propagation)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
             # Add the image component of that wavelength to the final image.
+            # The image is generated from the wavefront, the size of which is given by wave_height_px (and has nothing to do with the number of pixels in the WFS detector!)            
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
+
+            # So instead, to get the right number of pixels per lenslet, we need to to replace this line with 
+            # self.im += self.weights[i]*self.wavefronts[i].image(N_OS = self.N_OS)
+            # Then we also need to define N_OS as a property of the WFS. we can calculate it from the plate scale (which in turn is computed from the fratio and the SCALED UP subaperture diameter (so D_out / N_lenslets) and pixel size (so D_subap / N_pixels_per_subap)), D_subap and the wavelength.
 
             # Restore the field.
             self.wavefronts[i].field = original_field
