@@ -32,10 +32,10 @@ def getAoPsfs(ao_system, N_frames, psf_as_px, dt,
 	fname = "ao_psfs"):
 	
 	# Determining the response matrix and reconstructor matrix.
-	if mode != 'open loop':
-		print("WARNING: I am not recomputing the response and reconstructor matrices - I am assuming they are already initialised in the AO system instance")
-	# 	ao_system.find_response_matrix()
-	# 	ao_system.compute_reconstructor(threshold=0.1)
+	# if mode != 'open loop':
+	# 	print("WARNING: I am not recomputing the response and reconstructor matrices - I am assuming they are already initialised in the AO system instance")
+	ao_system.find_response_matrix()
+	ao_system.compute_reconstructor(threshold=0.1)
 
 	# Running the AO loop.
 	psfs_ao, psf_mean, psf_mean_all, strehls = ao_system.run_loop(
@@ -53,7 +53,6 @@ def getAoPsfs(ao_system, N_frames, psf_as_px, dt,
 	psf_dl = centreCrop(ao_system.dm.wavefronts[1].psf_dl(plate_scale_as_px = psf_as_px), psfs_ao[0].shape)
 
 	# Saving to file
-	pdb.set_trace()
 	if saveIt:
 		np.savez(fname, 
 			ao_system = ao_system,
