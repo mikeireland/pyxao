@@ -32,10 +32,11 @@ def getAoPsfs(ao_system, N_frames, psf_as_px, dt,
 	fname = "ao_psfs"):
 	
 	# Determining the response matrix and reconstructor matrix.
-	# if mode != 'open loop':
-	# 	print("WARNING: I am not recomputing the response and reconstructor matrices - I am assuming they are already initialised in the AO system instance")
-	ao_system.find_response_matrix()
-	ao_system.compute_reconstructor(threshold=0.1)
+	if mode != 'open loop':
+		if ao_system.response_matrix == None:
+			ao_system.find_response_matrix()
+		if ao_system.reconstructor == None:
+			ao_system.compute_reconstructor(threshold=0.1)
 
 	# Running the AO loop.
 	psfs_ao, psf_mean, psf_mean_all, strehls = ao_system.run_loop(
