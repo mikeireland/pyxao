@@ -73,6 +73,8 @@ class SCFeedBackAO():
         self.dm = dm
         self.wfs = wfs        
         self.dm_poke_scale = dm_poke_scale
+        self.response_matrix = None
+        self.reconstructor = None
         
     #############################################################################################################
     def psf_dl(self, plate_scale_as_px,
