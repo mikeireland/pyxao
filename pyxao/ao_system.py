@@ -163,7 +163,7 @@ class SCFeedBackAO():
         self.response_matrix = self.response_matrix.T
         
     #############################################################################################################
-    def compute_reconstructor(self,mode='eigenclamp', threshold=0.2):
+    def compute_reconstructor(self,mode='eigenclamp', threshold=0.1):
         """Compute the reconstructor
         
         Parameters
