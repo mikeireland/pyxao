@@ -71,8 +71,7 @@ class ShackHartmann(WFS):
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nlenslets)
              ypx = np.append(ypx,np.repeat( wavefronts[0].sz//2 -np.sqrt(3)/2*lw + (np.arange(nrows-1) - nrows//2+1)*np.sqrt(3)*lw,nlenslets))
              if not central_lenslet:
-                xpx += lw/2
-                ypx += lw*np.sqrt(3)/4
+                ypx += lw/np.sqrt(3)
 
         # Square geometry        
         elif geometry == 'square':
@@ -94,6 +93,8 @@ class ShackHartmann(WFS):
             #plt.clf()
             plt.plot(px[:,0], px[:,1],'o')
         
+        plt.imshow(wavefronts[0].pupil)
+                
         #Now go through the wavefronts (i.e. wavelengths) and create the pupil functions
         #and propagators. We first have to find the shortest wavelength (longest focal length)
         self.wavefronts = wavefronts
