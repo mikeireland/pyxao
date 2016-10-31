@@ -92,8 +92,7 @@ class ShackHartmann(WFS):
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nlenslets)
              ypx = np.append(ypx,np.repeat( wavefronts[0].sz//2 -np.sqrt(3)/2*lw + (np.arange(nrows-1) - nrows//2+1)*np.sqrt(3)*lw,nlenslets))
              if not central_lenslet:
-                xpx += lw/2
-                ypx += lw*np.sqrt(3)/4
+                ypx += lw/np.sqrt(3)
 
         # Square geometry        
         elif geometry == 'square':
@@ -116,6 +115,8 @@ class ShackHartmann(WFS):
             #plt.clf()
             plt.plot(px[:,0], px[:,1],'o')
         
+        plt.imshow(wavefronts[0].pupil)
+                
         #Now go through the wavefronts (i.e. wavelengths) and create the pupil functions
         #and propagators. We first have to find the shortest wavelength (longest focal length)
         self.wavefronts = wavefronts
@@ -199,10 +200,9 @@ class ShackHartmann(WFS):
     def sense(self,mode='gauss_weighted',
             window_hw=5, 
             window_fwhm=5.0, 
-            # N_phot=None, 
-            # RN=1.5,
             dclamp=10,
-            subtract_perfect=True):
+            subtract_perfect=True,
+            restore_field=True):
         """Sense the tilt and flux modes.
 
         TODO: modify this so that it doesn't change the field variable in the wavefront instances...
@@ -225,6 +225,10 @@ class ShackHartmann(WFS):
             value.
         subtract_perfect: boolean
             Do we subtract the centroid offsets from a perfect (i.e. flat) wavefront?
+        restore_field (optional): boolean
+            Restore the field after sensing the wavefront, in case someone wants to 
+            make an image at this wavelength without re-propagating. i.e. this enables
+            a beasmplitter to be placed before the WFS by default. default:True
             
         Returns
         -------
@@ -238,7 +242,8 @@ class ShackHartmann(WFS):
         # Compute the image appearing on the WFS detector.
         for i in range(len(self.wavefronts)):
             # Make a temporary copy of the field so that we can restore it after propgation.
-            original_field = self.wavefronts[i].field
+            if restore_field:
+                original_field = self.wavefronts[i].field
             
             # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
@@ -253,7 +258,8 @@ class ShackHartmann(WFS):
             # Then we also need to define N_OS as a property of the WFS. we can calculate it from the plate scale (which in turn is computed from the fratio and the SCALED UP subaperture diameter (so D_out / N_lenslets) and pixel size (so D_subap / N_pixels_per_subap)), D_subap and the wavelength.
 
             # Restore the field.
-            self.wavefronts[i].field = original_field
+            if restore_field:
+                self.wavefronts[i].field = original_field
         
         # If the photon number is set, then we add noise.
         if self.N_phot > 0:

@@ -81,6 +81,14 @@ class Atmosphere():
     def evolve(self, time=0):
         """Evolve the atmosphere to a new time
         
+        This isn't the fastest code, as it wraps the full array even when only a subset is
+        needed. If an atmosphere was to know about the subarray size, it could use 
+        numpy routines like:
+        ix00  = BLAH
+        delays00 = delays0.flat[np.ravel_multi_index(ix00,delays00.shape,mode='wrap')]
+        ix10 = (ix00[0]+1,ix00[1])
+        ...
+        
         Parameters
         ----------
         time: float
