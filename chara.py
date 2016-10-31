@@ -28,6 +28,8 @@ wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.17,plotit=True
 #dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.135,geometry='hexagonal', plotit=True,central_actuator=True)
 #wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.135,plotit=True, central_lenslet=False)
 
+#dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.135,geometry='hexagonal', plotit=True,central_actuator=True)
+#wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.17,plotit=True, central_lenslet=True)
 
 #pdb.set_trace()
 #print("Click to continue")
@@ -38,15 +40,15 @@ aos.find_response_matrix()
 aos.compute_reconstructor(threshold=0.1)
 
 #Add an atmosphere model to our wavefronts. 
-atm = pyxao.Atmosphere(sz=512, m_per_pix=wf_sense.m_per_pix,r_0=[0.1,0.1,0.1]) #For 1.7" seeing, try: ,r_0=[0.1,0.1,0.1])
-#atm = pyxao.Atmosphere(sz=512, m_per_pix=wf_sense.m_per_pix,r_0=[0.2,0.2,0.2]) #For 0.85" seeing, try: ,r_0=[0.2,0.2,0.2])
+#atm = pyxao.Atmosphere(sz=512, m_per_pix=wf_sense.m_per_pix,r_0=[0.1,0.1,0.1]) #For 1.7" seeing, try: ,r_0=[0.1,0.1,0.1])
+atm = pyxao.Atmosphere(sz=512, m_per_pix=wf_sense.m_per_pix,r_0=[0.2,0.2,0.2]) #For 0.85" seeing, try: ,r_0=[0.2,0.2,0.2])
 wf_sense.add_atmosphere(atm)
 wf_image.add_atmosphere(atm)
 
 #See if the reconstructor works!
 #sensors,ims  = aos.correct_twice()
 
-im_mn, im_perfect = aos.run_loop(plotit=True,niter=260,K_i=0.8,K_leak=0.9)
+im_mn, im_perfect = aos.run_loop(plotit=True,niter=260,K_i=0.8,K_leak=0.9,nframesbetweenplots=50)
 #Uncomment the line below instead to see uncorrected seeing.
 #im_mn = aos.run_loop(plotit=True,gain=0.0)
 
