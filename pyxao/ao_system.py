@@ -330,13 +330,16 @@ class SCFeedBackAO():
         
         # Figuring out the size of the PSF image to return.
         psf_sz = self.wavefronts[psf_ix].image(plate_scale_as_px=plate_scale_as_px).shape[0]
-        if not psf_sz_cropped:
+        if plate_scale_as_px and not psf_sz_cropped:
             # Oversampling factor of the PSF. Note that N_OS is equivalent to the 'sigma' of the pupil image in the DL.
             plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
             N_OS = self.wavefronts[psf_ix].wave / self.wavefronts[psf_ix].D / 2 / plate_scale_rad_px
             psf_sz_cropped = np.ceil(min(psf_sz, 4 * N_OS * psf_sigma_limit_N_os))
         else:
-            psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))        
+            if psf_sz_cropped:
+                psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))        
+            else:
+                psf_sz_cropped = psf_sz
 
         # Arrays to hold images
         psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))# at the psf_ix wavelength
@@ -381,54 +384,54 @@ class SCFeedBackAO():
                    
             # Plotting
             if plotit & ((k % nframesbetweenplots) == 0):
-                self._plot_ao_loop_iteration(self, k, plot_sz_px)
+                self._plot_ao_loop_iteration(k, plot_sz_px)
                 
         return psfs_cropped
 
-#############################################################################################################
-def _plot_ao_loop_iteration(self, k, plot_sz_px):
-    """ Plot the WFS detector image, phase and psf in an iteration of the AO loop. """
-    if k == 0:
-        axes = []
-        plots = []
-        plt.rc('text', usetex=True)
+    #############################################################################################################
+    def _plot_ao_loop_iteration(self, k, plot_sz_px):
+        """ Plot the WFS detector image, phase and psf in an iteration of the AO loop. """
+        if k == 0:
+            axes = []
+            plots = []
+            plt.rc('text', usetex=True)
 
-        # WFS plot                    
-        fig_wfs = mu.newfigure(2,2)
-        ax_wfs = fig_wfs.add_subplot(111)  # WFS detector image
-        ax_wfs.title.set_text(r'WFS detector')
-        ax_wfs.axis( [0,self.wavefronts[0].sz,0,self.wavefronts[0].sz] )
-        plot_wfs = ax_wfs.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
+            # WFS plot                    
+            fig_wfs = mu.newfigure(2,2)
+            ax_wfs = fig_wfs.add_subplot(111)  # WFS detector image
+            ax_wfs.title.set_text(r'WFS detector')
+            ax_wfs.axis( [0,self.wavefronts[0].sz,0,self.wavefronts[0].sz] )
+            plot_wfs = ax_wfs.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
 
-        fig = mu.newfigure(width=2,height=1)
+            fig = mu.newfigure(width=2,height=1)
         
-        # Phase
-        axes.append(fig.add_subplot(N_science_imgs,2,2*j+1)) 
-        axes[-1].title.set_text(r'Corrected phase ($\lambda$ = %d nm)' % (self.wavefronts[self.image_ixs[j]].wave*1e9))
-        plots.append(axes[-1].imshow(np.angle(self.wavefronts[self.image_ixs[j]].field)*self.wavefronts[self.image_ixs[j]].pupil,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
-        mu.colourbar(plots[-1])
+            # Phase
+            axes.append(fig.add_subplot(N_science_imgs,2,2*j+1)) 
+            axes[-1].title.set_text(r'Corrected phase ($\lambda$ = %d nm)' % (self.wavefronts[self.image_ixs[j]].wave*1e9))
+            plots.append(axes[-1].imshow(np.angle(self.wavefronts[self.image_ixs[j]].field)*self.wavefronts[self.image_ixs[j]].pupil,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
+            mu.colourbar(plots[-1])
 
-        # Science image
-        axes.append(fig.add_subplot(N_science_imgs,2,2*j+2))  
-        axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.wavefronts[self.image_ixs[j]].wave*1e9))
-        pad_x = max((imsize - plot_sz_px[0]) // 2, 0)
-        pad_y = max((imsize - plot_sz_px[1]) // 2, 0)
-        im_cropped = psf_science[j,pad_x:pad_x + min(imsize, plot_sz_px[0]),pad_y:pad_y + min(imsize, plot_sz_px[1])]
-        plots.append(axes[-1].imshow(im_cropped,interpolation='nearest', cmap=cm.gist_heat, norm=LogNorm()))
-        mu.colourbar(plots[-1])
-    else:
-        # Update the plots
-        plot_wfs.set_data(self.wfs.im)  
-        fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, K_i, K_leak))
-        for j in range(N_science_imgs):
-            plots[2*j].set_data(np.angle(self.wavefronts[self.image_ixs[j]].field)*self.wavefronts[self.image_ixs[j]].pupil)
+            # Science image
+            axes.append(fig.add_subplot(N_science_imgs,2,2*j+2))  
+            axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.wavefronts[self.image_ixs[j]].wave*1e9))
             pad_x = max((imsize - plot_sz_px[0]) // 2, 0)
             pad_y = max((imsize - plot_sz_px[1]) // 2, 0)
-            im_cropped = im_science[j,pad_x:pad_x + min(imsize, plot_sz_px[0]),pad_y:pad_y + min(imsize, plot_sz_px[1])]
-            plots[2*j+1].set_data(im_cropped)
+            im_cropped = psf_science[j,pad_x:pad_x + min(imsize, plot_sz_px[0]),pad_y:pad_y + min(imsize, plot_sz_px[1])]
+            plots.append(axes[-1].imshow(im_cropped,interpolation='nearest', cmap=cm.gist_heat, norm=LogNorm()))
+            mu.colourbar(plots[-1])
+        else:
+            # Update the plots
+            plot_wfs.set_data(self.wfs.im)  
+            fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, K_i, K_leak))
+            for j in range(N_science_imgs):
+                plots[2*j].set_data(np.angle(self.wavefronts[self.image_ixs[j]].field)*self.wavefronts[self.image_ixs[j]].pupil)
+                pad_x = max((imsize - plot_sz_px[0]) // 2, 0)
+                pad_y = max((imsize - plot_sz_px[1]) // 2, 0)
+                im_cropped = im_science[j,pad_x:pad_x + min(imsize, plot_sz_px[0]),pad_y:pad_y + min(imsize, plot_sz_px[1])]
+                plots[2*j+1].set_data(im_cropped)
 
-    plt.draw()
-    plt.pause(0.00001)  # Need this to plot on some machines.
+        plt.draw()
+        plt.pause(0.00001)  # Need this to plot on some machines.
 
 
         
