@@ -3,10 +3,10 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
+import scipy.misc
 import pdb
 import time
 import pdb
-from linguinesim.obssim import resizeImageToDetector
 plt.ion()
 
 try:
@@ -255,10 +255,8 @@ class Wavefront():
 
         # Downsampling if required.
         if N_OS < 1:
-            irr = resizeImageToDetector(image_raw = irr, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
-            efield_re = resizeImageToDetector(image_raw = efield.real, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
-            efield_imag = resizeImageToDetector(image_raw = efield.imag, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
-            efield = efield_re + 1j * efield_imag
+            irr = scipy.misc.imresize(irr, N_OS)
+            efield = scipy.misc.imresize(efield.real, N_OS) + 1j*scipy.misc.imresize(efield.imag, N_OS)
 
         if plotIt:
             plt.figure()

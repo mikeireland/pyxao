@@ -20,8 +20,8 @@ def strehl(psf, psf_dl):
 	
 def centre_crop(psf, psf_sz_cropped):
     """Crop an image about the center"""
-        return psf[psf.shape[0]/2-psf_sz_cropped//2:psf.shape[0]/2-psf_sz_cropped//2+psf_sz_cropped,
-                   psf.shape[1]/2-psf_sz_cropped//2:psf.shape[1]/2-psf_sz_cropped//2+psf_sz_cropped] 
+    return psf[psf.shape[0]/2-psf_sz_cropped//2:psf.shape[0]/2-psf_sz_cropped//2+psf_sz_cropped,
+               psf.shape[1]/2-psf_sz_cropped//2:psf.shape[1]/2-psf_sz_cropped//2+psf_sz_cropped] 
 	
 class SCFeedBackAO():
     """A single-congugate adaptive optics system. The initialization order should be:
