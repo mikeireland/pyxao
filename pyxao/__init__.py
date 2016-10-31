@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import LogNorm 
 from matplotlib import rc
-rc('image', interpolation='none', cmap = 'binary')
-
+rc('image', interpolation='none', cmap = 'binary_r')
 import numpy as np
 
 plt.ion()

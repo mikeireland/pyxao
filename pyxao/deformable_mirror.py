@@ -17,7 +17,7 @@ class DeformableMirror():
     wavefronts: list of Wavefront instances
     central_actuator: boolean
         Is there an actuator at the pupil center? If not, offset by half an actuator.
-    plotIt: boolean
+    plotit: boolean
         Do we make pretty plots?
     actuator_pitch: float
         Separation between actuators in m
@@ -29,7 +29,7 @@ class DeformableMirror():
         
     # Upon construction, the actuator geometry is set. Nothing else happens really.
     def __init__(self,influence_function='gaussian',wavefronts=[],central_actuator=False,\
-        plotIt=False,actuator_pitch=0.5,geometry='hexagonal',edge_radius=1.4):
+        plotit=False,actuator_pitch=0.5,geometry='hexagonal',edge_radius=1.4):
 
         if len(wavefronts)==0:
             print("ERROR: Must initialise the DeformableMirror with a wavefront list")
@@ -53,8 +53,7 @@ class DeformableMirror():
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nactuators)
              ypx = np.append(ypx,np.repeat( wavefronts[0].sz//2 -np.sqrt(3)/2*lw + (np.arange(nrows-1) - nrows//2+1)*np.sqrt(3)*lw,nactuators))
              if not central_actuator:
-                xpx += lw/2
-                ypx += lw*np.sqrt(3)/4
+                ypx += lw/np.sqrt(3)
                 
         elif geometry == 'square':
             # x, y coordinates of each actuator
@@ -81,7 +80,7 @@ class DeformableMirror():
         good = np.array(good)
         px = px[good]
         self.px=px
-        if plotIt:
+        if plotit:
             plt.clf()
             plt.plot(px[:,0], px[:,1],'o')
         self.nactuators = px.shape[0]

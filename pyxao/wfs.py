@@ -51,23 +51,31 @@ class ShackHartmann(WFS):
     """
     def __init__(
         self,
-        mask=None,
-        geometry='square',
-        wavefronts=[],
-        central_lenslet=True,
-        lenslet_pitch=0.5,
-        sampling=None,   # TODO implement Nyquist sampling!
-        fratio=None,
-        plotIt=False,
-        weights=None
+        lenslet_pitch,
+        geometry,
+        central_lenslet,
+        mask = None,
+        wavefronts = [],
+        sampling = None,   # TODO implement Nyquist sampling!
+        fratio = None,
+        plotit=False,
+        weights=None,
+        RN = 0,       # read noise
+        N_phot = 0    # photon noise
         ):
         
+        # What do we need to know?
+        #   - the Nyquist sampling (N_OS) of the wavefront sensor, given by
+        #           N_OS = wavelength / 2 / D_subap / plate_scale_rad
+
         if len(wavefronts)==0:
             print("ERROR: Must initialise the ShackHartmann with a wavefront list")
             raise UserWarning
         
-        self.lenslet_pitch=lenslet_pitch
-        self.central_lenslet=central_lenslet
+        self.lenslet_pitch = lenslet_pitch
+        self.central_lenslet = central_lenslet
+        self.N_phot = N_phot
+        self.RN = RN
         
         #Create lenslet geometry
         xpx = []
@@ -84,8 +92,7 @@ class ShackHartmann(WFS):
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nlenslets)
              ypx = np.append(ypx,np.repeat( wavefronts[0].sz//2 -np.sqrt(3)/2*lw + (np.arange(nrows-1) - nrows//2+1)*np.sqrt(3)*lw,nlenslets))
              if not central_lenslet:
-                xpx += lw/2
-                ypx += lw*np.sqrt(3)/4
+                ypx += lw/np.sqrt(3)
 
         # Square geometry        
         elif geometry == 'square':
@@ -104,10 +111,12 @@ class ShackHartmann(WFS):
         good = np.array([wavefronts[0].pupil[int(np.round(p[1])),int(np.round(p[0]))] != 0 for p in px])
         px = px[good]
         self.px=px
-        if plotIt:
+        if plotit:
             #plt.clf()
             plt.plot(px[:,0], px[:,1],'o')
         
+        plt.imshow(wavefronts[0].pupil)
+                
         #Now go through the wavefronts (i.e. wavelengths) and create the pupil functions
         #and propagators. We first have to find the shortest wavelength (longest focal length)
         self.wavefronts = wavefronts
@@ -183,7 +192,6 @@ class ShackHartmann(WFS):
 
         # Create a perfect set of WFS outputs with no atmosphere.
         for wf in wavefronts:
-            # wf.field = wf.pupil
             wf.flatten_field()
 
         # Get the wavefront sensed by the WFS. At this point the wavefronts have been reset and so all spots lie at the centre of their subapertures. This variable is used in sense() if the desired centroid output format to be specified w.r.t. their nominal positions.
@@ -192,18 +200,17 @@ class ShackHartmann(WFS):
     def sense(self,mode='gauss_weighted',
             window_hw=5, 
             window_fwhm=5.0, 
-            nphot=None, 
-            rnoise=1.5,
             dclamp=10,
-            subtract_perfect=True):
+            subtract_perfect=True,
+            restore_field=True):
         """Sense the tilt and flux modes.
 
         TODO: modify this so that it doesn't change the field variable in the wavefront instances...
         
         Parameters
         ----------
-        nphot: float
-        rnoise: float
+        N_phot: float
+        RN: float
         mode: string
             NOT IMPLEMENTED YET
         window_hw: int
@@ -211,13 +218,17 @@ class ShackHartmann(WFS):
         window_fwhm: float
             Full-width half-maximum of the weighting window used to extract each
             lenslet
-        rnoise: float
+        RN: float
             Readout noise in electrons.
         dclamp: float
             Denominator clamping value. Gain is reduced for subaperture fluxes below this
             value.
         subtract_perfect: boolean
             Do we subtract the centroid offsets from a perfect (i.e. flat) wavefront?
+        restore_field (optional): boolean
+            Restore the field after sensing the wavefront, in case someone wants to 
+            make an image at this wavelength without re-propagating. i.e. this enables
+            a beasmplitter to be placed before the WFS by default. default:True
             
         Returns
         -------
@@ -231,23 +242,31 @@ class ShackHartmann(WFS):
         # Compute the image appearing on the WFS detector.
         for i in range(len(self.wavefronts)):
             # Make a temporary copy of the field so that we can restore it after propgation.
-            original_field = self.wavefronts[i].field
+            if restore_field:
+                original_field = self.wavefronts[i].field
             
             # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
             # Then propagate (Huygens propagation)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
             # Add the image component of that wavelength to the final image.
+            # The image is generated from the wavefront, the size of which is given by wave_height_px (and has nothing to do with the number of pixels in the WFS detector!)            
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
 
+            # So instead, to get the right number of pixels per lenslet, we need to to replace this line with 
+            # self.im += self.weights[i]*self.wavefronts[i].image(N_OS = self.N_OS)
+            # Then we also need to define N_OS as a property of the WFS. we can calculate it from the plate scale (which in turn is computed from the fratio and the SCALED UP subaperture diameter (so D_out / N_lenslets) and pixel size (so D_subap / N_pixels_per_subap)), D_subap and the wavelength.
+
             # Restore the field.
-            self.wavefronts[i].field = original_field
+            if restore_field:
+                self.wavefronts[i].field = original_field
         
         # If the photon number is set, then we add noise.
-        if nphot:
-            self.im = self.im/np.sum(self.im)*nphot
+        if self.N_phot > 0:
+            self.im = self.im/np.sum(self.im)*self.N_phot
             self.im = np.random.poisson(self.im).astype(float)
-            self.im += np.random.normal(scale=rnoise,size=self.im.shape)
+        if self.RN > 0:
+            self.im += np.random.normal(scale=self.RN,size=self.im.shape)
         
         # Now sense the centroids.
         xx = np.arange(2*window_hw + 1) - window_hw
@@ -271,7 +290,7 @@ class ShackHartmann(WFS):
 
             # Sum of all pixel intensities in the subaperture (denominator of the centroid calc)
             xyf[2,i] = np.sum(subim*gg)
-            if nphot:
+            if self.N_phot > 0:
                 denom = np.maximum(xyf[2,i],dclamp)
             else:
                 denom = xyf[2,i]
@@ -283,7 +302,7 @@ class ShackHartmann(WFS):
         #The flux variable only has any meaning with respect to the mean. 
         #A logarithm should also be taken so that differences to a perfect image
         #are meaningful.
-        if nphot:
+        if self.N_phot > 0:
             denom = np.maximum(np.mean(xyf[2]),dclamp)
         else:
             denom = np.mean(xyf[2])

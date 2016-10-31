@@ -3,6 +3,7 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
+import scipy.misc
 import pdb
 import time
 import pdb
@@ -12,9 +13,9 @@ try:
     import pyfftw
     pyfftw.interfaces.cache.enable()
     pyfftw.interfaces.cache.set_keepalive_time(1.0)
-    nthreads=6 
+    nthreads = 8 
 except:
-    nthreads=0
+    nthreads = 0
 
 
 class Wavefront():
@@ -49,6 +50,9 @@ class Wavefront():
         if ptype == "annulus":
             self.pupil = ot.utils.circle(self.sz, pupil['dout']/self.m_per_px) - ot.utils.circle(self.sz, pupil['din']/self.m_per_px)
             self.D = pupil['dout']
+        elif ptype == "square":
+            self.pupil = ot.utils.square(self.sz, pupil['dout']/self.m_per_px) - ot.utils.square(self.sz, pupil['din']/self.m_per_px)
+            self.D = pupil['dout']
         else:
             print("Invalid pupil 'type' keyword!")
 
@@ -59,7 +63,7 @@ class Wavefront():
         # Index of the propagator list corresponding to the atmosphere
         # (zero since there's no atmosphere yet)
         self.atmosphere_start = 0
-        self.atm=None
+        self._atm=None
         
     def add_propagator(self,distance, demag=1.0):
         """Add a propagator to the list of propagators
@@ -98,16 +102,21 @@ class Wavefront():
         self.atmosphere_start = len(self.propagators)
         for dz in atm.dz:
             self.propagators.append(ot.FresnelPropagator(self.sz,self.m_per_px,dz, self.wave))
-        self.atm=atm
+
+        # !!! Do we really need the following line? i.e. we need the propagators, but do we need
+        # the *atmosphere* ?
+        self._atm=atm
         
     def remove_atmosphere(self):
         """Remove atmosphere propagators and link to the atmosphere"""
-        if not self.atm:
+        if not self._atm:
             print("ERROR: No atmosphere to remove!")
             raise UserWarning
-        for i in range(self.atm.nlayers):
+        for i in range(self._atm.nlayers):
             self.propagators.pop(self.atmosphere_start)
-        self.atm = None
+
+        self._atm = None
+
             
     def atm_field(self, 
         edge_smooth = 16):
@@ -122,7 +131,8 @@ class Wavefront():
         edge_smooth: int
             Smooth this many pixels from the edge when propagating through the atmosphere.
             Needed because the wavefront is *not* periodic after being truncated to the size (sz) of this wavefront."""
-        atm = self.atm
+
+        atm = self._atm
         if not atm:
             print("ERROR: Intitialise wavefront with add_atmosphere() first!")
             raise UserWarning
@@ -163,11 +173,11 @@ class Wavefront():
         self.field = (1+0j) * np.ones((self.sz,self.sz))
         self.field *= self.pupil
 
-    def image(self, 
-        nyquist_sampling = None,
+    def image(self,
+        N_OS = None,
         plate_scale_as_px = None,
         return_efield = False,
-        plotIt = False
+        plotit = False
         ):
         """ Return an image based on the current field. Note that this routine does NOT modify the field variable. 
 
@@ -175,30 +185,33 @@ class Wavefront():
         ----------
         return_efield: boolean
             Do we return an electric field? If not, return the intensity.
-        nyquist_sampling: float
+        N_OS: float
             How to sample the image. A sampling factor of 1.0 implies Nyquist sampling at this wavefront's wavelength: i.e. the plate scale in the image, f_x = wavelength / 2D (i.e. 2 pixels across the FWHM). A sampling factor of 2.0 implies twice this resolution, etc.
         plate_scale_as_px: float
             The plate scale of the final image. 
-
-            Only neither or one of nyquist_sampling and plate_scale_as_px must be specified.
+            Only neither or one of N_OS and plate_scale_as_px must be specified.
 
             TODO: resample the pupil if the fftpad < 1.
             When fftpad = 1, this corresponds to 1 pixel across the FWHM. This is independent of N.
             """
 
         # Padding the image to obtain the appropriate plate scale or sampling for the given wavelength.
-        if nyquist_sampling and plate_scale_as_px:
+        if N_OS and plate_scale_as_px:
             print("ERROR: Nyquist sampling and plate scale cannot both be specified!")
             raise UserWarning
-        if not nyquist_sampling and not plate_scale_as_px:
+        if not N_OS and not plate_scale_as_px:
             # By default, we want to Nyquist sample (2 pixels per FWHM)
             fftpad = 2
         elif plate_scale_as_px:
             plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
-            #TODO fix this
             fftpad = self.wave / self.D / plate_scale_rad_px   # padding factor
+            N_OS = fftpad / 2
         else:
-            fftpad = 2 * nyquist_sampling
+            if N_OS >= 1:
+                fftpad = 2 * N_OS
+            else:
+                # If N_OS < 1, then we need to generate the image at a higher resolution and then downsample it. 
+                fftpad = 2
     
         # total padded side length 
         N = np.ceil(self.sz * fftpad).astype(np.int)  
@@ -231,7 +244,9 @@ class Wavefront():
         if (nthreads==0):
             efield = np.fft.fft2(zpad)
         else:
+            tic = time.time()
             efield = pyfftw.interfaces.numpy_fft.fft2(zpad,threads=nthreads)
+            print("dt = %.5f" % (time.time()-tic))
 
         # Shift the zero-frequency component to the center of the spectrum.
         efield = np.fft.fftshift(efield)
@@ -241,7 +256,13 @@ class Wavefront():
 
         irr = np.abs(efield)**2 # Irradiance
 
-        if plotIt:
+
+        # Downsampling if required.
+        if N_OS < 1:
+            irr = scipy.misc.imresize(irr, N_OS)
+            efield = scipy.misc.imresize(efield.real, N_OS) + 1j*scipy.misc.imresize(efield.imag, N_OS)
+
+        if plotit:
             plt.figure()
             plt.imshow(irr)
             plt.title('Irradiance')
@@ -254,9 +275,9 @@ class Wavefront():
             return irr
 
     def psf_dl(self, 
-        nyquist_sampling = None,
+        N_OS = None,
         plate_scale_as_px = None,
-        plotIt = False,
+        plotit = False,
         return_efield = False
         ):
         """  Find the PSF of the wavefront at a given wavelength. 
@@ -270,10 +291,9 @@ class Wavefront():
         self.flatten_field()
 
         # The PSF is then simply the FFT of the pupil.
-        psf = self.image(nyquist_sampling = nyquist_sampling,
-        plate_scale_as_px = plate_scale_as_px, return_efield = return_efield)
-
-        if plotIt:
+        psf = self.image(N_OS = N_OS, plate_scale_as_px = plate_scale_as_px, return_efield = return_efield)
+        psf /= sum(psf.flatten())
+        if plotit:
             axesScale = [0, self.sz*self.m_per_px, 0, self.sz*self.m_per_px]
             plt.figure()
             plt.imshow(psf, extent = axesScale)

@@ -31,15 +31,29 @@ class Atmosphere():
     r_0: list of floats
         Fried coherence lengths defined at 0.5 microns for each layer
     """
-    def __init__(self,sz = 1024, m_per_px=0.02,elevations=[10e3,5e3,0],v_wind=[20,10,5],r_0=[.2,.2,.2],angle_wind=[.1,.1,.1],airmass=1.0):
-        wave_ref = .5e-6 #reference for r_0
+    def __init__(self,sz = 1024, 
+        m_per_px=0.02,
+        elevations=[10e3,5e3,0],
+        v_wind=[20,10,5],
+        r_0=[.2,.2,.2],
+        angle_wind=[.1,.1,.1],
+        airmass=1.0,
+        wave_ref = .5e-6,
+        seed=None
+        ): 
+
+        # Convert to lists if necessary
+        if np.isscalar(elevations) and np.isscalar(v_wind) and np.isscalar(r_0) and np.isscalar(angle_wind):
+            r_0 = [r_0]
+            v_wind = [v_wind]
+            elevations = [elevations]
+            angle_wind = [angle_wind]
+
         self.nlayers=len(r_0)
         self.sz=sz
         self.m_per_px=m_per_px
         self.angle_wind = angle_wind
         self.time=0
-        # self.elevations = elevations    # AZ
-        # self.airmass = airmass          # AZ
 
         #Sanity check inputs
         if ( (len(elevations) != len(v_wind)) |
@@ -58,7 +72,7 @@ class Atmosphere():
         #Delays in meters at time=0
         self.delays0 = np.empty( (len(r_0),sz,sz) )
         for i in range(self.nlayers): 
-            self.delays0[i] = ot.kmf(sz) * np.sqrt(6.88*(m_per_px/r_0[i])**(5.0/3.0)) * wave_ref / 2 / np.pi
+            self.delays0[i] = ot.kmf(sz,seed) * np.sqrt(6.88*(m_per_px/r_0[i])**(5.0/3.0)) * wave_ref / 2 / np.pi
         
         #Delays in meters at another time.
         self.delays  = self.delays0.copy()
@@ -66,6 +80,14 @@ class Atmosphere():
         
     def evolve(self, time=0):
         """Evolve the atmosphere to a new time
+        
+        This isn't the fastest code, as it wraps the full array even when only a subset is
+        needed. If an atmosphere was to know about the subarray size, it could use 
+        numpy routines like:
+        ix00  = BLAH
+        delays00 = delays0.flat[np.ravel_multi_index(ix00,delays00.shape,mode='wrap')]
+        ix10 = (ix00[0]+1,ix00[1])
+        ...
         
         Parameters
         ----------
