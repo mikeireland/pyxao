@@ -17,7 +17,7 @@ class DeformableMirror():
     wavefronts: list of Wavefront instances
     central_actuator: boolean
         Is there an actuator at the pupil center? If not, offset by half an actuator.
-    plotit: boolean
+    plotIt: boolean
         Do we make pretty plots?
     actuator_pitch: float
         Separation between actuators in m
@@ -29,7 +29,7 @@ class DeformableMirror():
         
     # Upon construction, the actuator geometry is set. Nothing else happens really.
     def __init__(self,influence_function='gaussian',wavefronts=[],central_actuator=False,\
-        plotit=False,actuator_pitch=0.5,geometry='hexagonal',edge_radius=1.4):
+        plotIt=False,actuator_pitch=0.5,geometry='hexagonal',edge_radius=1.4):
 
         if len(wavefronts)==0:
             print("ERROR: Must initialise the DeformableMirror with a wavefront list")
@@ -43,7 +43,7 @@ class DeformableMirror():
         xpx = []
         ypx = []
         # Pixels per actuator
-        lw = actuator_pitch/wavefronts[0].m_per_pix
+        lw = actuator_pitch/wavefronts[0].m_per_px
         nactuators = int(np.floor(wavefronts[0].sz/lw))
         if geometry == 'hexagonal':
              nrows = np.int(np.floor(nactuators / np.sqrt(3)/2))*2+1 #Always odd
@@ -80,7 +80,7 @@ class DeformableMirror():
         good = np.array(good)
         px = px[good]
         self.px=px
-        if plotit:
+        if plotIt:
             plt.clf()
             plt.plot(px[:,0], px[:,1],'o')
         self.nactuators = px.shape[0]
@@ -100,7 +100,8 @@ class DeformableMirror():
         xx = np.arange(sz) - sz//2
         xy = np.meshgrid(xx,xx)
         rr = np.sqrt(xy[0]**2 + xy[1]**2)
-        aw = self.actuator_pitch/self.wavefronts[0].m_per_pix
+        aw = self.actuator_pitch / self.wavefronts[0].m_per_px
+
         if self.influence_function == 'gaussian':
             gg = np.exp(-rr**2/2.0/(aw/2.3548)**2)
         else:
@@ -120,7 +121,7 @@ class DeformableMirror():
             # The phasescreen gets converted to a true phase: phase = phasecreen * 2pi / lambda
             # So the same correction in terms of distance gets applied to all wavelengths 
             # which corresponds to different phase corrections based on the wavelength.
-            wf.field = wf.field*np.exp(2j*np.pi*phasescreen/wf.wave)
+            wf.field = wf.field * np.exp(2j*np.pi*phasescreen/wf.wave)
 
         self.phasescreen = phasescreen
         
