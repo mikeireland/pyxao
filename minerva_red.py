@@ -22,23 +22,17 @@ wf_sense = pyxao.Wavefront(wave=0.66e-6,m_per_px=0.01,sz=128,pupil=pupil)
 # Science wavelength
 wf_image = pyxao.Wavefront(wave=0.85e-6,m_per_px=0.01,sz=128,pupil=pupil)
 
-#dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.15,geometry='square', plotit=True)
-#wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.26,plotit=True)
-
-
 dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.115,geometry='square', plotit=False,central_actuator=True)
-wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.105,sampling=1,plotit=False,geometry='hexagonal')
-
-#pdb.set_trace()
-#print("Click to continue")
-#dummy=plt.ginput(1)
-
-aos = pyxao.SCFeedBackAO(dm,wfs)
-aos.find_response_matrix()
-aos.compute_reconstructor(threshold=0.1)
+wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.105,central_lenslet=False,sampling=1,plotit=False,geometry='hexagonal')
 
 #Add an atmosphere model to our wavefronts. 
 atm = pyxao.Atmosphere(sz=1024, m_per_px=wf_sense.m_per_px,r_0=[0.1,0.1,0.1]) #For 1.7" seeing, try: ,r_0=[0.1,0.1,0.1])
+
+aos = pyxao.SCFeedBackAO(dm,wfs,atm,image_ixs=1)
+aos.find_response_matrix()
+aos.compute_reconstructor(threshold=0.1)
+
+
 wf_sense.add_atmosphere(atm)
 wf_image.add_atmosphere(atm)
 
@@ -46,14 +40,16 @@ wf_image.add_atmosphere(atm)
 #sensors,ims  = aos.correct_twice()
 
 # pdb.set_trace()
-im_mn, im_perfect = aos.run_loop(plotit=False,dt=0.002,nphot=1e4,niter=50,mode='dodgy_damping',dodgy_damping=0.95,gain=1.0,plate_scale_as_px=0.1)[-2:]
+psfs = aos.run_loop(plotit=True,dt=0.002,niter=50,mode='integrator',plate_scale_as_px=0.1,psf_ix = 1,nframesbetweenplots=10)
+psf_mn = np.mean(psfs,axis=0)
 #Uncomment the line below instead to see uncorrected seeing.
 # im_mn = aos.run_loop(plotit=True,dt=0.002,nphot=1e4,niter=50,mode='dodgy_damping',dodgy_damping=0.0,gain=0.0,plate_scale_as_px=0.125)[-2]
 
 #Strehl: Regrid in order to sample finely the peak.
-strehl = np.max(ot.utils.regrid_fft(im_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(im_perfect,(1024,1024)))
+psf_dl = aos.psf_dl(plate_scale_as_px=0.1,psf_ix=1)
+strehl = np.max(ot.utils.regrid_fft(psf_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(psf_dl,(1024,1024)))
 
-sz = im_mn.shape[0]
+sz = psf_mn.shape[0]
 plt.figure()
 plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
 print("Strehl: {0:6.3f}".format(strehl))
