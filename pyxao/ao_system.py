@@ -1,7 +1,5 @@
 from __future__ import division, print_function
 
-from linguinesim.obssim import convolvePSF, strehl
-from linguinesim.imutils import centreCrop
 import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,10 +9,20 @@ import scipy.linalg as la
 import matplotlib.cm as cm
 import miscutils as mu
 import time
-from aosim.pyxao import TENTH_AIRY_RING
+
+TENTH_AIRY_RING = 10.25
 
 plt.ion()
 
+def strehl(psf, psf_dl):
+	""" Calculate the Strehl ratio of an aberrated input PSF given the diffraction-limited PSF. """
+	return np.amax(psf) / np.amax(psf_dl)
+	
+def centre_crop(psf, psf_sz_cropped):
+    """Crop an image about the center"""
+    return psf[psf.shape[0]/2-psf_sz_cropped//2:psf.shape[0]/2-psf_sz_cropped//2+psf_sz_cropped,
+               psf.shape[1]/2-psf_sz_cropped//2:psf.shape[1]/2-psf_sz_cropped//2+psf_sz_cropped] 
+	
 class SCFeedBackAO():
     """A single-congugate adaptive optics system. The initialization order should be:
     
@@ -29,8 +37,9 @@ class SCFeedBackAO():
     
     Parameters
     ----------
-    dm: DeformableMirror instance
+    dm: DeformableMirror instance, which contains all wavefronts.
     wfs: WFS or child class instance
+    atm: A single atmosphere for all wavefronts.
     conjugate_location: float
         location of wfs and DM conjugate
     image_ixs: list
@@ -43,6 +52,7 @@ class SCFeedBackAO():
     def __init__(self,
                 dm,
                 wfs,
+                atm,
                 conjugate_location=0.0,
                 image_ixs=None,
                 dm_poke_scale=1e-7):
@@ -61,6 +71,9 @@ class SCFeedBackAO():
             print("OOPS: invalid type for image_ixs - must be of type list or int!")
             raise UserWarning
 
+        print("Sensing wavefronts:")
+        print(image_ixs)
+
         # Conjugate location
         if conjugate_location != 0:
             print("OOPS: Not implemented yet - only ground layer conugation so far")
@@ -72,9 +85,14 @@ class SCFeedBackAO():
         self.wavefronts = dm.wavefronts
         self.dm = dm
         self.wfs = wfs        
+        self.atm = atm
         self.dm_poke_scale = dm_poke_scale
         self.response_matrix = None
         self.reconstructor = None
+
+        #Add an atmosphere to all wavefronts.
+        for wf in self.wavefronts:
+            wf.add_atmosphere(atm)
         
     #############################################################################################################
     def psf_dl(self, plate_scale_as_px,
@@ -91,7 +109,6 @@ class SCFeedBackAO():
             By default, the returned PSF is cropped at the 10th Airy ring. 
         """
 
-        # ix = self._get_wavelength(band = band, ix = ix)
         print("Generating the diffraction-limited PSF at wavelength {:.2f} nm...".format(self.wavefronts[ix].wave * 1e9))
 
         # Generating the PSF
@@ -111,7 +128,7 @@ class SCFeedBackAO():
             elif matplotlib.cbook.is_scalar(psf_sz_cropped):
                 psf_sz_cropped = (psf_sz_cropped, psf_sz_cropped)
            
-            psf = centreCrop(psf, psf_sz_cropped) 
+            psf = centre_crop(psf, psf_sz_cropped) 
 
         if plotIt:
             mu.astroimshow(im = psf, plate_scale_as_px = plate_scale_as_px, title = r'Diffraction-limited PSF at $\lambda = %.1f$ $\mu$m' % (self.wavefronts[ix].wave * 1e9))
@@ -255,19 +272,18 @@ class SCFeedBackAO():
         
     #############################################################################################################
     def run_loop(self, dt, 
-                mode = 'open loop',
+                mode = 'integrator',
                 niter = 100,
                 gains = {
-                    'K_p' : 0.5, 
+                    'K_p' : 0.0, 
                     'K_i' : 1.0, 
-                    'K_d' : 0.2, 
+                    'K_d' : 0.0, 
                     'K_leak' : 0.9
                     },
                 psf_ix = 0,                     # Index in the list of wavefronts of the PSF you want to be returned
                 psf_sz_cropped = None,          # Size of the PSF. By default cropped at the 10th Airy ring
                 psf_sigma_limit_N_os = TENTH_AIRY_RING,     # Corresponds to 10 Airy rings
                 plate_scale_as_px = None,       # Plate scale of the output images/PSFs
-                im_input = None,                # Input image that we convolve with the PSF at the wavelength corresponding to psf_ix. For now it is assumed to have the same plate scale as plate_scale_as_px.
                 plot_sz_px = (80,80),     # For now this is only used in plotting
                 nframesbetweenplots = 10,
                 plotIt = False
@@ -305,12 +321,15 @@ class SCFeedBackAO():
         psf_ix: int
             Index in self.image_ixs corresponding to the wavelength of the PSF to be returned.
         plate_scale_as_px: float
-            Plate scale for the output science images. For now, only put in the plate scale instead of the Nyquist sampling because we image at a range of wavelengths with the same detector.
+            Plate scale for the output science images in arcsecons per pixel. For now, only 
+            put in the plate scale instead of the Nyquist sampling because we image at a 
+            range of wavelengths with the same detector.
         """
         # DM coefficients (control commands)
         coefficients_current = np.zeros(self.dm.nactuators) # timestep k
         
         # WFS measurements
+        y_integral = np.zeros(self.wfs.nsense) 
         y_current = np.zeros(self.wfs.nsense)    # timestep k
         y_old = np.zeros(self.wfs.nsense)        # timestep k - 1
 
@@ -318,35 +337,32 @@ class SCFeedBackAO():
         N_science_imgs = len(self.image_ixs)
         imsize = 0
         for ix in self.image_ixs:
-            imsize = max(imsize, self.dm.wavefronts[ix].image(plate_scale_as_px=plate_scale_as_px).shape[0])  
+            imsize = max(imsize, self.wavefronts[ix].image(plate_scale_as_px=plate_scale_as_px).shape[0])  
         
         # Size of the uncropped PSF image.
         psf_sz = self.dm.wavefronts[psf_ix].image(plate_scale_as_px=plate_scale_as_px).shape[0]
+        
         # Oversampling factor of the PSF. Note that N_OS is equivalent to the 'sigma' of the pupil image in the DL.
         plate_scale_rad_px = np.deg2rad(plate_scale_as_px / 3600)
         N_OS = self.dm.wavefronts[psf_ix].wave / self.dm.wavefronts[psf_ix].D / 2 / plate_scale_rad_px
+
         # How many 'sigmas' we want the returned PSF grid to encompass.
         if not psf_sz_cropped:
             psf_sz_cropped = np.ceil(min(psf_sz, 4 * N_OS * psf_sigma_limit_N_os))
         else:
             psf_sz_cropped = np.ceil(min(psf_sz, psf_sz_cropped))        
+
         # Arrays to hold images
         psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))# at the psf_ix wavelength
         psf_mean = np.zeros((psf_sz_cropped, psf_sz_cropped))           # at the psf_ix wavelength
         psf_mean_all = np.zeros((imsize, imsize))   # sum over all wavelengths
+
         # Diffraction-limited PSFs
         psfs_dl = []
         for ix in self.image_ixs:
             psfs_dl.append(self.dm.wavefronts[ix].psf_dl(N_OS = N_OS))
         np.array(psfs_dl)
         strehls = np.zeros((N_science_imgs, niter))
-        # If an input image is specified.
-        if im_input is not None:
-            # If the image size is actually smaller than the detector, then we make the detector this size too.
-            plot_sz_px = (min(im_input.shape[0], plot_sz_px[0]), min(im_input.shape[1], plot_sz_px[1]))
-            im_mean = np.zeros(plot_sz_px)    # at the psf_ix wavelength
-            ims_science = np.zeros((niter, plot_sz_px[0], plot_sz_px[1]))    # at the psf_ix wavelength
-            im_input_cropped = centreCrop(im_input, plot_sz_px)    # Cropped to detector size
 
         """ AO Control loop """
         # At this point, the field variables all include the atmosphere.
@@ -356,8 +372,8 @@ class SCFeedBackAO():
         for k in range(niter):  
             #------------------ AO CONTROL ------------------#
             print("Iteration %d..." % (k+1))
-            for wf in self.dm.wavefronts:   # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.                
-                wf.atm.evolve(dt * k)   # This doesn't affect the field variable.
+            self.atm.evolve(dt * k)
+            for wf in self.wavefronts:   # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.                
                 wf.atm_field()          # Now, the wavefront fields include only the atmosphere.           
             
             if mode == 'open loop':
@@ -368,11 +384,12 @@ class SCFeedBackAO():
                 measurements = self.wfs.sense() # Sense the corrected wavefront. Does not modify the field variable.
                 y_old = y_current                       # y at timestep k - 1
                 y_current = measurements.flatten()      # y at timestep k
+                y_integral += y_current * dt            # Integrate over time.
                 coefficients_next = np.zeros(self.dm.nactuators)    # timestep k + 1
                 # Apply control logic.                
                 if mode == 'PID':
-                    coefficients_next += gains['K_leak'] * coefficients_current - gains['K_i'] * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
-                    coefficients_next += - gains['K_p'] * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
+                    coefficients_next +=  - gains['K_i'] * np.dot(self.reconstructor,y_integral) * self.dm_poke_scale
+                    coefficients_next += gains['K_leak'] * coefficients_current - gains['K_p'] * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
                     coefficients_next += - gains['K_d'] * (1/dt) * (np.dot(self.reconstructor,y_current) - np.dot(self.reconstructor,y_old)) * self.dm_poke_scale
                 elif mode == 'integrator':  
                     coefficients_next = gains['K_leak'] * coefficients_current - gains['K_i'] * np.dot(self.reconstructor,y_current) * self.dm_poke_scale
@@ -393,9 +410,12 @@ class SCFeedBackAO():
                 psf /= sum(psf.flatten())
                 # Strehl ratios
                 strehls[i, k] = strehl(psf, psfs_dl[i])              
-                # Saving the PSF.
+                # Saving the PSF. Was centreCrop(psf, psf_sz_cropped)
                 if ix == psf_ix:
-                    psfs_cropped[k] = centreCrop(psf, psf_sz_cropped) 
+                    psfs_cropped[k] = centre_crop(psf, psf_sz_cropped)
+                    
+                    psf[psf.shape[0]/2-psf_sz_cropped//2:psf.shape[0]/2-psf_sz_cropped//2+psf_sz_cropped,
+                                          psf.shape[1]/2-psf_sz_cropped//2:psf.shape[1]/2-psf_sz_cropped//2+psf_sz_cropped]  
                 pad_x = (imsize - psf.shape[0])//2
                 pad_y = (imsize - psf.shape[1])//2       
                 psfs_science[i,pad_x:pad_x + psf.shape[0], pad_y:pad_y + psf.shape[1]] = psf  # Science images separated into different wavelengths
@@ -406,15 +426,6 @@ class SCFeedBackAO():
                 psf_mean += psfs_cropped[k]
                 psf_mean_all += psf_science_all  
 
-            # Create the science image, if required.
-            # The science image is im_input (cropped to the detector size) convolved with the PSF corresponding to psf_ix.
-            if im_input is not None:
-                # pdb.set_trace()
-                im_science = apdsim.convolvePSF(image = im_input_cropped, psf = psfs_cropped[k])
-                ims_science[k] = im_science
-                # Update the mean image.
-                if (k != 0):
-                    im_mean += im_science           
                  
             #------------------ PLOTTING ------------------#
             if plotIt & ((k % nframesbetweenplots) == 0):                  
@@ -443,15 +454,9 @@ class SCFeedBackAO():
                         # PSF
                         axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+3))  
                         axes[-1].title.set_text(r'Point spread function ($\lambda$ = %d nm), Strehl = %.5f' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9, strehls[j, k]))
-                        psf_cropped = centreCrop(psfs_science[j], plot_sz_px)
+                        psf_cropped = centre_crop(psfs_science[j], plot_sz_px)
                         plots.append(axes[-1].imshow(psf_cropped,interpolation='nearest', cmap=cm.gist_heat))
                         mu.colorbar(plots[-1])
-                        # Science image
-                        if im_input is not None and psf_ix == self.image_ixs[j]:
-                            axes.append(fig.add_subplot(N_science_imgs,fig_width,2*j+4))  
-                            axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9))    
-                            plots.append(axes[-1].imshow(im_science, interpolation='nearest', cmap=cm.gist_heat))
-                            mu.colorbar(plots[-1])
                 else:
                     if mode == 'open loop':
                         fig.suptitle(r'Open loop phase and science images, $k = %d$' % k)
@@ -461,7 +466,7 @@ class SCFeedBackAO():
                         plots[2*j].set_data(self.wfs.im)        # Update WFS                        
                         phase_current = np.angle(self.dm.wavefronts[self.image_ixs[j]].field)*self.dm.wavefronts[self.image_ixs[j]].pupil
                         plots[2*j+1].set_data(phase_current)    # Update phase
-                        psf_cropped = centreCrop(psfs_science[j], plot_sz_px)   # Update PSF. Crop it to the detector size first 
+                        psf_cropped = centre_crop(psfs_science[j], plot_sz_px)   # Update PSF. Crop it to the detector size first 
                         plots[2*j+2].set_data(psf_cropped)
                         axes[2*j+2].title.set_text(r'Point spread function ($\lambda$ = %d nm), Strehl = %.5f' % (self.dm.wavefronts[self.image_ixs[j]].wave*1e9, strehls[j, k]))                        
                         if im_input is not None:                # Update image
@@ -478,9 +483,9 @@ class SCFeedBackAO():
         if plotIt:
             mu.newfigure(1,3)
             plt.suptitle('AO PSFs, control mode %s' % mode)
-            mu.astroimshow(centreCrop(self.dm.wavefronts[psf_ix].psf_dl(plate_scale_as_px = plate_scale_as_px), psf_sz_cropped), 'Diffraction-limited PSF', plate_scale_as_px, 131)
+            mu.astroimshow(centre_crop(self.dm.wavefronts[psf_ix].psf_dl(plate_scale_as_px = plate_scale_as_px), psf_sz_cropped), 'Diffraction-limited PSF', plate_scale_as_px, 131)
             mu.astroimshow(psf_mean, r'Mean PSF ($\lambda = %d$ nm), Strehl = %.5f' % (self.dm.wavefronts[psf_ix].wave*1e9, strehl(psf_mean, psfs_dl[0])), plate_scale_as_px, 132)
-            mu.astroimshow(centreCrop(psf_mean_all, psf_sz_cropped), 'Mean PSF (all wavelengths)', plate_scale_as_px, 133)
+            mu.astroimshow(centre_crop(psf_mean_all, psf_sz_cropped), 'Mean PSF (all wavelengths)', plate_scale_as_px, 133)
             plt.show()              
 
         if im_input is not None:
@@ -489,12 +494,4 @@ class SCFeedBackAO():
         else:
             return psfs_cropped, psf_mean, psf_mean_all, strehls
 
-    #############################################################################################################
-    def _get_wavelength(self, band, ix):
-        if band == None and ix == None:
-            print("ERROR: you must specify either an imaging band OR an index in the list of wavefronts corresponding to the wavelength of the PSF you want returned!")
-            raise UserWarning
-        elif band:
-            return self.wavelength_ixs[band]
-        else:
-            return ix
+

@@ -7,6 +7,7 @@ import matplotlib.cm as cm
 import pdb
 plt.ion()
 np.random.seed(1)
+
 #from PyQt4 import QtGui
 #from PyQt4 import QtCore
 #Strehl:
@@ -48,9 +49,9 @@ im_mn, im_perfect = aos.run_loop(plotIt=False,dt=0.002,nphot=1e4,niter=50,mode='
 # im_mn = aos.run_loop(plotIt=True,dt=0.002,nphot=1e4,niter=50,mode='dodgy_damping',dodgy_damping=0.0,gain=0.0,plate_scale_as_px=0.125)[-2]
 
 #Strehl: Regrid in order to sample finely the peak.
-# strehl = np.max(ot.utils.regrid_fft(im_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(im_perfect,(1024,1024)))
+strehl = np.max(ot.utils.regrid_fft(im_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(im_perfect,(1024,1024)))
 
 sz = im_mn.shape[0]
 plt.figure()
 plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
-# print("Strehl: {0:6.3f}".format(strehl))
+print("Strehl: {0:6.3f}".format(strehl))

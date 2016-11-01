@@ -5,14 +5,15 @@ import matplotlib.cm as cm
 from matplotlib.colors import LogNorm 
 from matplotlib import rc
 rc('image', interpolation='none', cmap = 'binary_r')
-
 import numpy as np
 
 plt.ion()
 
-import miscutils as mu
-
-TENTH_AIRY_RING = 10.25
+from wfs import *
+from atmosphere import *
+from wavefront import *
+from deformable_mirror import *
+from ao_system import *
 
 # These below should go in a demo program...
 

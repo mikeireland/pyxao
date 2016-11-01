@@ -3,10 +3,10 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
+import scipy.misc
 import pdb
 import time
 import pdb
-from linguinesim.obssim import resizeImageToDetector
 plt.ion()
 
 try:
@@ -63,7 +63,7 @@ class Wavefront():
         # Index of the propagator list corresponding to the atmosphere
         # (zero since there's no atmosphere yet)
         self.atmosphere_start = 0
-        self.atm=None
+        self._atm=None
         
     def add_propagator(self,distance, demag=1.0):
         """Add a propagator to the list of propagators
@@ -102,16 +102,18 @@ class Wavefront():
         self.atmosphere_start = len(self.propagators)
         for dz in atm.dz:
             self.propagators.append(ot.FresnelPropagator(self.sz,self.m_per_px,dz, self.wave))
-        self.atm=atm
+        # !!! Do we really need the following line? i.e. we need the propagators, but do we need
+        # the *atmosphere* ?
+        self._atm=atm
         
     def remove_atmosphere(self):
         """Remove atmosphere propagators and link to the atmosphere"""
-        if not self.atm:
+        if not self._atm:
             print("ERROR: No atmosphere to remove!")
             raise UserWarning
-        for i in range(self.atm.nlayers):
+        for i in range(self._atm.nlayers):
             self.propagators.pop(self.atmosphere_start)
-        self.atm = None
+        self._atm = None
             
     def atm_field(self, 
         edge_smooth = 16):
@@ -126,7 +128,7 @@ class Wavefront():
         edge_smooth: int
             Smooth this many pixels from the edge when propagating through the atmosphere.
             Needed because the wavefront is *not* periodic after being truncated to the size (sz) of this wavefront."""
-        atm = self.atm
+        atm = self._atm
         if not atm:
             print("ERROR: Intitialise wavefront with add_atmosphere() first!")
             raise UserWarning
@@ -253,10 +255,8 @@ class Wavefront():
 
         # Downsampling if required.
         if N_OS < 1:
-            irr = resizeImageToDetector(image_raw = irr, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
-            efield_re = resizeImageToDetector(image_raw = efield.real, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
-            efield_imag = resizeImageToDetector(image_raw = efield.imag, source_plate_scale_as = N_OS, dest_plate_scale_as = 1)
-            efield = efield_re + 1j * efield_imag
+            irr = scipy.misc.imresize(irr, N_OS)
+            efield = scipy.misc.imresize(efield.real, N_OS) + 1j*scipy.misc.imresize(efield.imag, N_OS)
 
         if plotIt:
             plt.figure()

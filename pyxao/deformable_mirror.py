@@ -53,8 +53,7 @@ class DeformableMirror():
              ypx = np.repeat( wavefronts[0].sz//2 + (np.arange(nrows) - nrows//2)*np.sqrt(3)*lw,nactuators)
              ypx = np.append(ypx,np.repeat( wavefronts[0].sz//2 -np.sqrt(3)/2*lw + (np.arange(nrows-1) - nrows//2+1)*np.sqrt(3)*lw,nactuators))
              if not central_actuator:
-                xpx += lw/2
-                ypx += lw*np.sqrt(3)/4
+                ypx += lw/np.sqrt(3)
                 
         elif geometry == 'square':
             # x, y coordinates of each actuator
