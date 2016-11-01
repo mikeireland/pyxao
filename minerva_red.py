@@ -18,12 +18,12 @@ np.random.seed(1)
 #view, we can assume monochromatic 
 pupil={'type':"annulus", 'dout':0.7,'din':0.32}
 # Wavefront sensor wavelength
-wf_sense = pyxao.Wavefront(wave=0.66e-6,m_per_px=0.01,sz=128,pupil=pupil)
+wf_sense = pyxao.Wavefront(wave=0.66e-6,m_per_px=0.01,sz=256,pupil=pupil)
 # Science wavelength
-wf_image = pyxao.Wavefront(wave=0.85e-6,m_per_px=0.01,sz=128,pupil=pupil)
+wf_image = pyxao.Wavefront(wave=0.85e-6,m_per_px=0.01,sz=256,pupil=pupil)
 
 dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.115,geometry='square', plotit=False,central_actuator=True)
-wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.105,central_lenslet=False,sampling=1,plotit=False,geometry='hexagonal')
+wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.105,central_lenslet=False,sampling=1,plotit=False,geometry='hexagonal',N_phot = 1600 * 1e4 * 1/2000 * 0.90 * 1000)
 
 #Add an atmosphere model to our wavefronts. 
 atm = pyxao.Atmosphere(sz=1024, m_per_px=wf_sense.m_per_px,r_0=[0.1,0.1,0.1]) #For 1.7" seeing, try: ,r_0=[0.1,0.1,0.1])
@@ -32,6 +32,9 @@ aos = pyxao.SCFeedBackAO(dm,wfs,atm,image_ixs=1)
 aos.find_response_matrix()
 aos.compute_reconstructor(threshold=0.1)
 
+# Want 1600 photons/cm2/s for the LGS. 
+# = photons/m/s = 1600 * 1e4
+# photons in im = 1600 * 1e4 * D * 1/2000
 
 wf_sense.add_atmosphere(atm)
 wf_image.add_atmosphere(atm)
@@ -51,5 +54,5 @@ strehl = np.max(ot.utils.regrid_fft(psf_mn,(1024,1024)))/np.max(ot.utils.regrid_
 
 sz = psf_mn.shape[0]
 plt.figure()
-plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
+plt.imshow(psf_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
 print("Strehl: {0:6.3f}".format(strehl))
