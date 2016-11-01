@@ -258,7 +258,7 @@ class Wavefront():
 
 
         # Downsampling if required.
-        if N_OS < 1:
+        if N_OS and (N_OS < 1):
             irr = scipy.misc.imresize(irr, N_OS)
             efield = scipy.misc.imresize(efield.real, N_OS) + 1j*scipy.misc.imresize(efield.imag, N_OS)
 
