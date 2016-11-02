@@ -36,9 +36,6 @@ aos.compute_reconstructor(threshold=0.1)
 # = photons/m/s = 1600 * 1e4
 # photons in im = 1600 * 1e4 * D * 1/2000
 
-wf_sense.add_atmosphere(atm)
-wf_image.add_atmosphere(atm)
-
 #See if the reconstructor works!
 #sensors,ims  = aos.correct_twice()
 
