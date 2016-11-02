@@ -187,16 +187,3 @@ class SeeingLimitedOpticalSystem():
                 plt.pause(0.00001)  # Need this to plot on some machines.
 
         return psfs_cropped
-
-    #############################################################################################################
-    # def _get_wavelength(self, band, ix):
-    #     if band == None and ix == None:
-    #         print("ERROR: you must specify either an imaging band OR an index in the list of wavefronts corresponding to the wavelength of the PSF you want returned!")
-    #         raise UserWarning
-    #     elif band:
-    #         return self.wavelength_ixs[band]
-    #     else:
-    #         return ix
-            
-
-
