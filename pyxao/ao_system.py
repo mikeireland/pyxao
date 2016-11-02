@@ -95,7 +95,6 @@ class SCFeedBackAO():
     #############################################################################################################
     def psf_dl(self, plate_scale_as_px,
         psf_ix = None,
-        band = None,
         crop = True,    # Whether or not to crop the PSF. If set to False, the below two arguments are irrelevant.
         psf_sz_cropped = None,          # Size of the PSF. By default cropped at the 10th Airy ring
         psf_sigma_limit_N_os = TENTH_AIRY_RING,     # Corresponds to 10 Airy rings
@@ -343,13 +342,14 @@ class SCFeedBackAO():
         """ AO Control loop """
         print("Starting the AO control loop with control logic mode '%s'..." % mode)
         for k in range(niter):  
-            #------------------ AO CONTROL ------------------#
+            #------------------ EVOLVING THE ATMOSPHERE ------------------#
             print("Iteration %d..." % (k+1))
             # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.                
             self.atm.evolve(dt * k)
             for wf in self.wavefronts:   
                 wf.atm_field() 
             
+            #------------------ AO CONTROL ------------------#
             if mode == 'open loop':
                 # We still measure the wavefront for plotting.
                 self.wfs.sense()
@@ -372,13 +372,13 @@ class SCFeedBackAO():
                     raise UserWarning            
                 coefficients_current = coefficients_next;   # Update the DM coefficients.
 
+            #-------------------- SAVING PSF ----------------------# 
             # Create the PSF            
             psf = self.wavefronts[psf_ix].image(plate_scale_as_px = plate_scale_as_px) 
             psf /= sum(psf.flatten())             
-            # Saving the PSF.            
             psfs_cropped[k] = centre_crop(psf, psf_sz_cropped) 
                    
-            # Plotting
+            #------------------ PLOTTING ------------------#
             if plotit & ((k % nframesbetweenplots) == 0):
                 if k == 0:
                     axes = []
