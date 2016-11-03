@@ -53,16 +53,20 @@ class SeeingLimitedOpticalSystem():
         """
 
     def __init__(self, 
+        wavelength_ixs,
         wavefronts, 
         atm):     
         # List of wavefronts.   
+        self.wavelength_ixs = wavelength_ixs
         self.atm = atm
         self.wavefronts = wavefronts
         for wf in self.wavefronts:
             wf.add_atmosphere(atm)
 
     #############################################################################################################
-    def psf_dl(self, plate_scale_as_px, psf_ix,
+    def psf_dl(self, plate_scale_as_px, 
+        band = None,
+        psf_ix = None,
         crop = True,    # Whether or not to crop the PSF. If set to False, the below two arguments are irrelevant.
         psf_sz_cropped = None,          # Size of the PSF. By default cropped at the 10th Airy ring
         psf_sigma_limit_N_os = TENTH_AIRY_RING,     # Corresponds to 10 Airy rings
@@ -74,6 +78,7 @@ class SeeingLimitedOpticalSystem():
             By default, the returned PSF is cropped at the 10th Airy ring. 
         """
 
+        psf_ix = self._get_wavelength_ix(band, psf_ix)
         print("Generating the diffraction-limited PSF at wavelength {:.2f} nm...".format(self.wavefronts[psf_ix].wave * 1e9))
 
         # Generating the PSF
@@ -187,3 +192,13 @@ class SeeingLimitedOpticalSystem():
                 plt.pause(0.00001)  # Need this to plot on some machines.
 
         return psfs_cropped
+
+    #############################################################################################################
+    def _get_wavelength_ix(self, band, ix):
+        if band == None and ix == None:
+            print("ERROR: you must specify either an imaging band OR an index in the list of wavefronts corresponding to the wavelength of the PSF you want returned!")
+            raise UserWarning
+        elif band:
+            return self.wavelength_ixs[band]
+        else:
+            return ix
