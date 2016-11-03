@@ -343,7 +343,8 @@ class SCFeedBackAO():
         print("Starting the AO control loop with control logic mode '%s'..." % mode)
         for k in range(niter):  
             #------------------ EVOLVING THE ATMOSPHERE ------------------#
-            print("Iteration %d..." % (k+1))
+            if ((k / niter) * 100) % 10 == 0:
+                print("{:d}% done...".format(int((k / niter) * 100)))
             # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.                
             self.atm.evolve(dt * k)
             for wf in self.wavefronts:   
@@ -409,8 +410,8 @@ class SCFeedBackAO():
                     fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, gains['K_i'], gains['K_leak']))
                     plots[0].set_data(np.angle(self.wavefronts[psf_ix].field)*self.wavefronts[psf_ix].pupil)
                     plots[1].set_data(centre_crop(psf, plot_sz_px))
-                plt.draw()
-                plt.pause(0.00001)  # Need this to plot on some machines.
+                # plt.draw()
+                # plt.pause(0.00001)  # Need this to plot on some machines.
                         
         return psfs_cropped   
 
