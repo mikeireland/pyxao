@@ -112,9 +112,14 @@ class ShackHartmann(WFS):
         self.px=px
         if plotit:
             #plt.clf()
+            plt.figure()
             plt.plot(px[:,0], px[:,1],'o')
         
-        plt.imshow(wavefronts[0].pupil)
+            # Plot the pupil.
+            plt.figure()
+            plt.title('WFS pupil')
+            plt.imshow(wavefronts[0].pupil)
+            plt.show()
                 
         #Now go through the wavefronts (i.e. wavelengths) and create the pupil functions
         #and propagators. We first have to find the shortest wavelength (longest focal length)
