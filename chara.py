@@ -4,7 +4,7 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import pdb
+import ipdb
 plt.ion()
 #from PyQt4 import QtGui
 #from PyQt4 import QtCore
@@ -32,7 +32,7 @@ wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.17,central_len
 #dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.135,geometry='hexagonal', plotit=True,central_actuator=True)
 #wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.17,plotit=True, central_lenslet=True)
 
-#pdb.set_trace()
+#ipdb.set_trace()
 #print("Click to continue")
 #dummy=plt.ginput(1)
 

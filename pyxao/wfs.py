@@ -2,7 +2,7 @@ from __future__ import division, print_function
 import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
-import pdb
+import ipdb
 import scipy.ndimage as nd
 
 # Base WFS class.

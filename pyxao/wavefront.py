@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
 import scipy.misc
-import pdb
+import ipdb
 import time
-import pdb
+import ipdb
 plt.ion()
 
 try:

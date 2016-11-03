@@ -4,7 +4,7 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-import pdb
+import ipdb
 import scipy.ndimage as nd
 import scipy.linalg as la
 import matplotlib.cm as cm
@@ -164,7 +164,7 @@ class SCFeedBackAO():
                 #Check that poking in both directions is equivalent!
                 if (np.sum(wfs_plus*wfs_minus)/np.sum(wfs_plus*wfs_plus) > -0.9):
                     print("WARNING: Poking the DM is assymetric!!!")
-                    # pdb.set_trace()
+                    # ipdb.set_trace()
 
                 # Taking the mean response value.
                 self.response_matrix[i] = 0.5*(wfs_plus - wfs_minus).flatten()
@@ -348,7 +348,6 @@ class SCFeedBackAO():
             if ((k / niter) * 100) % 10 == 0:
                 print("{:d}% done...".format(int((k / niter) * 100)))
             # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.
-            pdb.set_trace()                
             self.atm.evolve(dt * k)
             for wf in self.wavefronts:   
                 wf.atm_field() 
@@ -407,14 +406,15 @@ class SCFeedBackAO():
                     plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.colorbar(plots[-1],fraction=COLORBAR_FRACTION, pad=COLORBAR_PAD)
+                    ipdb.set_trace()
                 else:
                     # Update the plots
                     plot_wfs.set_data(self.wfs.im)  
                     fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, gains['K_i'], gains['K_leak']))
                     plots[0].set_data(np.angle(self.wavefronts[psf_ix].field)*self.wavefronts[psf_ix].pupil)
                     plots[1].set_data(centre_crop(psf, plot_sz_px))
-                # plt.draw()
-                # plt.pause(0.00001)  # Need this to plot on some machines.
+                plt.draw()
+                plt.pause(0.00001)  # Need this to plot on some machines.
                         
         return psfs_cropped   
 

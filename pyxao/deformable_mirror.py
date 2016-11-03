@@ -3,7 +3,7 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
-import pdb
+import ipdb
 
 class DeformableMirror():
     """A deformable mirror.
