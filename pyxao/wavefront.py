@@ -13,9 +13,11 @@ try:
     import pyfftw
     pyfftw.interfaces.cache.enable()
     pyfftw.interfaces.cache.set_keepalive_time(1.0)
-    nthreads = 8 
+    nthreads = 16 
+    print("WARNING: using pyfftw with {:d} threads...".format(nthreads))
 except:
     nthreads = 0
+    print("WARNING: I could not import pyfftw, so I am using numpy fft routines instead...")
 
 
 class Wavefront():
@@ -246,7 +248,7 @@ class Wavefront():
         else:
             tic = time.time()
             efield = pyfftw.interfaces.numpy_fft.fft2(zpad,threads=nthreads)
-            print("dt = %.5f" % (time.time()-tic))
+            # print("dt = %.5f" % (time.time()-tic))
 
         # Shift the zero-frequency component to the center of the spectrum.
         efield = np.fft.fftshift(efield)
