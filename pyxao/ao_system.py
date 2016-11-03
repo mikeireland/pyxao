@@ -87,6 +87,8 @@ class SCFeedBackAO():
         self.wfs = wfs        
         self.atm = atm
         self.dm_poke_scale = dm_poke_scale
+        self.response_matrix = None
+        self.reconstructor = None
 
         #Add an atmosphere to all wavefronts.
         for wf in self.wavefronts:
@@ -345,7 +347,8 @@ class SCFeedBackAO():
             #------------------ EVOLVING THE ATMOSPHERE ------------------#
             if ((k / niter) * 100) % 10 == 0:
                 print("{:d}% done...".format(int((k / niter) * 100)))
-            # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.                
+            # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.
+            pdb.set_trace()                
             self.atm.evolve(dt * k)
             for wf in self.wavefronts:   
                 wf.atm_field() 
