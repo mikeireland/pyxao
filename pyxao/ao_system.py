@@ -4,7 +4,10 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-import ipdb
+try:
+    import ipdb
+except:
+    import pdb
 import scipy.ndimage as nd
 import scipy.linalg as la
 import matplotlib.cm as cm
