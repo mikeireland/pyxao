@@ -460,7 +460,6 @@ class SCFeedBackAO():
 
         plt.draw()
         plt.pause(0.00001)  # Need this to plot on some machines.
->>>>>>> 818c66611c1061ec142395fd45cf946badec624b
 
     
 
