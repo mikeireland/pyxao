@@ -4,7 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import scipy.ndimage as nd
-import pdb
+try:
+    import ipdb
+except:
+    import pdb
 
 class Atmosphere():
     """A model of the atmosphere, including a fixed phase screen. 
@@ -59,7 +62,7 @@ class Atmosphere():
         if ( (len(elevations) != len(v_wind)) |
             (len(v_wind) != len(r_0)) |
             (len(r_0) != len(angle_wind)) ):
-            pdb.set_trace()
+            ipdb.set_trace()
             print("ERROR: elevations, v_wind, r_0 and angle_wind must all be the same length")
             raise UserWarning 
         
@@ -73,7 +76,7 @@ class Atmosphere():
         self.delays0 = np.empty( (len(r_0),sz,sz) )
         for i in range(self.nlayers): 
             self.delays0[i] = ot.kmf(sz,seed) * np.sqrt(6.88*(m_per_px/r_0[i])**(5.0/3.0)) * wave_ref / 2 / np.pi
-        
+
         #Delays in meters at another time.
         self.delays  = self.delays0.copy()
             

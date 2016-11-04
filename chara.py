@@ -4,7 +4,12 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import pdb
+try:
+    import ipdb
+except:
+    #The following ling is dodgy, but still enables set_trace()
+    import pdb as ipdb
+    
 plt.ion()
 #from PyQt4 import QtGui
 #from PyQt4 import QtCore
@@ -32,7 +37,7 @@ wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.17,central_len
 #dm  = pyxao.DeformableMirror(wavefronts=[wf_sense,wf_image],actuator_pitch=0.135,geometry='hexagonal', plotit=True,central_actuator=True)
 #wfs = pyxao.ShackHartmann(wavefronts=[wf_sense],lenslet_pitch = 0.17,plotit=True, central_lenslet=True)
 
-#pdb.set_trace()
+#ipdb.set_trace()
 #print("Click to continue")
 #dummy=plt.ginput(1)
 
@@ -48,16 +53,17 @@ aos.compute_reconstructor(threshold=0.1)
 #See if the reconstructor works!
 #sensors,ims  = aos.correct_twice()
 
-im_mn, im_perfect = aos.run_loop(dt=0.001,plotit=True,niter=260,nframesbetweenplots=50)
+im_mn= aos.run_loop(dt=0.001,plotit=True,niter=260,nframesbetweenplots=50)
 
+#im_perfect = ??? #How do we compute Strehl now?
 
 #Uncomment the line below instead to see uncorrected seeing.
 #im_mn = aos.run_loop(plotit=True,gain=0.0)
 
 #Strehl: Regrid in order to sample finely the peak.
-strehl = np.max(ot.utils.regrid_fft(im_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(im_perfect,(1024,1024)))
+#strehl = np.max(ot.utils.regrid_fft(im_mn,(1024,1024)))/np.max(ot.utils.regrid_fft(im_perfect,(1024,1024)))
 
-sz = im_mn.shape[0]
-plt.clf()
-plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
-print("Strehl: {0:6.3f}".format(strehl))
+#sz = im_mn.shape[0]
+#plt.clf()
+#plt.imshow(im_mn[sz//2-20:sz//2+20,sz//2-20:sz//2+20],interpolation='nearest', cmap=cm.gist_heat)
+#print("Strehl: {0:6.3f}".format(strehl))

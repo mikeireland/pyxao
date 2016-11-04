@@ -4,7 +4,11 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-import pdb
+try:
+    import ipdb
+except:
+    #The following ling is dodgy, but still enables set_trace()
+    import pdb as ipdb
 import scipy.ndimage as nd
 import scipy.linalg as la
 import matplotlib.cm as cm
@@ -87,6 +91,8 @@ class SCFeedBackAO():
         self.wfs = wfs        
         self.atm = atm
         self.dm_poke_scale = dm_poke_scale
+        self.response_matrix = None
+        self.reconstructor = None
 
         #Add an atmosphere to all wavefronts.
         for wf in self.wavefronts:
@@ -95,7 +101,6 @@ class SCFeedBackAO():
     #############################################################################################################
     def psf_dl(self, plate_scale_as_px,
         psf_ix = None,
-        band = None,
         crop = True,    # Whether or not to crop the PSF. If set to False, the below two arguments are irrelevant.
         psf_sz_cropped = None,          # Size of the PSF. By default cropped at the 10th Airy ring
         psf_sigma_limit_N_os = TENTH_AIRY_RING,     # Corresponds to 10 Airy rings
@@ -163,7 +168,7 @@ class SCFeedBackAO():
                 #Check that poking in both directions is equivalent!
                 if (np.sum(wfs_plus*wfs_minus)/np.sum(wfs_plus*wfs_plus) > -0.9):
                     print("WARNING: Poking the DM is assymetric!!!")
-                    # pdb.set_trace()
+                    # ipdb.set_trace()
 
                 # Taking the mean response value.
                 self.response_matrix[i] = 0.5*(wfs_plus - wfs_minus).flatten()
@@ -264,8 +269,6 @@ class SCFeedBackAO():
         return [measurements0,measurements1,measurements2],[im0,im1,im2] 
         
 
-
-
     #############################################################################################################
     def run_loop(self, dt, 
                 mode = 'integrator',
@@ -339,19 +342,30 @@ class SCFeedBackAO():
             else:
                 psf_sz_cropped = psf_sz
 
+        #Make plate_scale_as_px for Nyquist sampling of the full size.
+        #See XXX below for a bug.
+        if not plate_scale_as_px:
+            plate_scale_rad_px = self.wavefronts[psf_ix].wave / (self.wavefronts[psf_ix].sz * self.wavefronts[psf_ix].m_per_px)
+            plate_scale_as_px = np.degrees(plate_scale_rad_px) * 3600
+            plate_scale_as_px_in = None
+        else:
+            plate_scale_as_px_in = plate_scale_as_px
+
         # Arrays to hold images
         psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))# at the psf_ix wavelength
 
         """ AO Control loop """
         print("Starting the AO control loop with control logic mode '%s'..." % mode)
         for k in range(niter):  
-            #------------------ AO CONTROL ------------------#
-            print("Iteration %d..." % (k+1))
-            # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.                
+            #------------------ EVOLVING THE ATMOSPHERE ------------------#
+            if ((k / niter) * 100) % 10 == 0:
+                print("{:d}% done...".format(int((k / niter) * 100)))
+            # Evolve the atmosphere & update the wavefront fields to reflect the new atmosphere.
             self.atm.evolve(dt * k)
             for wf in self.wavefronts:   
                 wf.atm_field() 
             
+            #------------------ AO CONTROL ------------------#
             if mode == 'open loop':
                 # We still measure the wavefront for plotting.
                 self.wfs.sense()
@@ -374,13 +388,14 @@ class SCFeedBackAO():
                     raise UserWarning            
                 coefficients_current = coefficients_next;   # Update the DM coefficients.
 
+            #-------------------- SAVING PSF ----------------------# 
             # Create the PSF            
-            psf = self.wavefronts[psf_ix].image(plate_scale_as_px = plate_scale_as_px) 
-            psf /= sum(psf.flatten())             
-            # Saving the PSF.            
+            # NB if the following line has non-none, then we have a uint 8 error XXX
+            psf = self.wavefronts[psf_ix].image(plate_scale_as_px = plate_scale_as_px_in) 
+            psf /= np.sum(psf.flatten())             
             psfs_cropped[k] = centre_crop(psf, psf_sz_cropped) 
                    
-            # Plotting
+            #------------------ PLOTTING ------------------#
             if plotit & ((k % nframesbetweenplots) == 0):
                 if k == 0:
                     axes = []
@@ -405,6 +420,7 @@ class SCFeedBackAO():
                     plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.colorbar(plots[-1],fraction=COLORBAR_FRACTION, pad=COLORBAR_PAD)
+                    ipdb.set_trace()
                 else:
                     # Update the plots
                     plot_wfs.set_data(self.wfs.im)  
@@ -416,51 +432,5 @@ class SCFeedBackAO():
                         
         return psfs_cropped
 
-    #############################################################################################################
-    def _plot_ao_loop_iteration(self, k, plot_sz_px):
-        """ Plot the WFS detector image, phase and psf in an iteration of the AO loop. """
-        if k == 0:
-            axes = []
-            plots = []
-            plt.rc('text', usetex=True)
-
-            # WFS plot                    
-            fig_wfs = mu.newfigure(2,2)
-            ax_wfs = fig_wfs.add_subplot(111)  # WFS detector image
-            ax_wfs.title.set_text(r'WFS detector')
-            ax_wfs.axis( [0,self.wavefronts[0].sz,0,self.wavefronts[0].sz] )
-            plot_wfs = ax_wfs.imshow(self.wfs.im,interpolation='nearest',cmap=cm.gray)
-
-            fig = mu.newfigure(width=2,height=1)
-        
-            # Phase
-            axes.append(fig.add_subplot(N_science_imgs,2,2*j+1)) 
-            axes[-1].title.set_text(r'Corrected phase ($\lambda$ = %d nm)' % (self.wavefronts[self.image_ixs[j]].wave*1e9))
-            plots.append(axes[-1].imshow(np.angle(self.wavefronts[self.image_ixs[j]].field)*self.wavefronts[self.image_ixs[j]].pupil,interpolation='nearest', cmap=cm.gist_rainbow, vmin=-np.pi, vmax=np.pi))
-            mu.colourbar(plots[-1])
-
-            # Science image
-            axes.append(fig.add_subplot(N_science_imgs,2,2*j+2))  
-            axes[-1].title.set_text(r'Science Image ($\lambda$ = %d nm)' % (self.wavefronts[self.image_ixs[j]].wave*1e9))
-            pad_x = max((imsize - plot_sz_px[0]) // 2, 0)
-            pad_y = max((imsize - plot_sz_px[1]) // 2, 0)
-            im_cropped = psf_science[j,pad_x:pad_x + min(imsize, plot_sz_px[0]),pad_y:pad_y + min(imsize, plot_sz_px[1])]
-            plots.append(axes[-1].imshow(im_cropped,interpolation='nearest', cmap=cm.gist_heat, norm=LogNorm()))
-            mu.colourbar(plots[-1])
-        else:
-            # Update the plots
-            plot_wfs.set_data(self.wfs.im)  
-            fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, K_i, K_leak))
-            for j in range(N_science_imgs):
-                plots[2*j].set_data(np.angle(self.wavefronts[self.image_ixs[j]].field)*self.wavefronts[self.image_ixs[j]].pupil)
-                pad_x = max((imsize - plot_sz_px[0]) // 2, 0)
-                pad_y = max((imsize - plot_sz_px[1]) // 2, 0)
-                im_cropped = im_science[j,pad_x:pad_x + min(imsize, plot_sz_px[0]),pad_y:pad_y + min(imsize, plot_sz_px[1])]
-                plots[2*j+1].set_data(im_cropped)
-
-        plt.draw()
-        plt.pause(0.00001)  # Need this to plot on some machines.
-
-    
 
         

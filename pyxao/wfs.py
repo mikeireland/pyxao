@@ -2,7 +2,10 @@ from __future__ import division, print_function
 import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
-import pdb
+try:
+    import ipdb
+except:
+    import pdb
 import scipy.ndimage as nd
 
 # Base WFS class.
@@ -40,8 +43,6 @@ class ShackHartmann(WFS):
     
     Parameters
     ----------
-    sampling: float
-        wavefront sensor sampling as a multiple of nyquist
     weights: float array
         optional weighting of wavelengths.
     fratio: float
@@ -61,7 +62,7 @@ class ShackHartmann(WFS):
         plotit=False,
         weights=None,
         RN = 0,       # read noise
-        N_phot = 0    # photon noise
+        N_phot = 0    # total # of photons in the WFS detector image
         ):
         
         # What do we need to know?
@@ -76,6 +77,7 @@ class ShackHartmann(WFS):
         self.central_lenslet = central_lenslet
         self.N_phot = N_phot
         self.RN = RN
+        self.sampling = sampling
         
         #Create lenslet geometry
         xpx = []
@@ -113,9 +115,14 @@ class ShackHartmann(WFS):
         self.px=px
         if plotit:
             #plt.clf()
+            plt.figure()
             plt.plot(px[:,0], px[:,1],'o')
         
-        plt.imshow(wavefronts[0].pupil)
+            # Plot the pupil.
+            plt.figure()
+            plt.title('WFS pupil')
+            plt.imshow(wavefronts[0].pupil)
+            plt.show()
                 
         #Now go through the wavefronts (i.e. wavelengths) and create the pupil functions
         #and propagators. We first have to find the shortest wavelength (longest focal length)
@@ -169,7 +176,7 @@ class ShackHartmann(WFS):
             # Make a curved wavefront corresponding to the wavefront over each subaperture.
             # Note that the pupil is actually a complex function because it's a lens - it modifies the wavefront!
             one_lenslet = ot.curved_wf(wf.sz,wf.m_per_px,f_length=flength,wave=wf.wave)
-            # Maksing each wavefront to the shape of the subapertures.
+            # Masking each wavefront to the shape of the subapertures.
             if geometry == 'hexagonal':
                 one_lenslet *= ot.utils.hexagon(wf.sz,lw)
             elif geometry == 'square':
@@ -247,11 +254,15 @@ class ShackHartmann(WFS):
             
             # Multiply the field by the pupil mask.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
-            # Then propagate (Huygens propagation)
+            # Then propagate (Fresnel propagation?)
             self.wavefronts[i].propagate(self.propagator_ixs[i])
             # Add the image component of that wavelength to the final image.
             # The image is generated from the wavefront, the size of which is given by wave_height_px (and has nothing to do with the number of pixels in the WFS detector!)            
             self.im += self.weights[i]*np.abs(self.wavefronts[i].field)**2
+            # if i == 0:
+            #     self.im = self.weights[i]*self.wavefronts[i].image(N_OS = self.sampling)   
+            # else: 
+            #     self.im += self.weights[i]*self.wavefronts[i].image(N_OS = self.sampling)
 
             # So instead, to get the right number of pixels per lenslet, we need to to replace this line with 
             # self.im += self.weights[i]*self.wavefronts[i].image(N_OS = self.N_OS)
