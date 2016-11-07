@@ -103,7 +103,7 @@ class SCFeedBackAO():
         plotit = False
         ):
         """ 
-            Compute and return the diffraction-limited PSF at the specified wavelength and plate scale. 
+            Compute and return a normalised diffraction-limited PSF at the specified wavelength and plate scale. 
 
             By default, the returned PSF is cropped at the 10th Airy ring. 
         """
@@ -359,6 +359,7 @@ class SCFeedBackAO():
             else:
                 self.dm.apply(coefficients_current) # Apply the wavefront correction. Note that this does NOT reset the wavefront but simply applies the phase change to the field variable.       
                 measurements = self.wfs.sense() # Sense the corrected wavefront. Does not modify the field variable.
+                ipdb.set_trace()
                 y_old = y_current                       # y at timestep k - 1
                 y_current = measurements.flatten()      # y at timestep k
                 y_integral += y_current * dt            # Integrate over time.
@@ -384,6 +385,8 @@ class SCFeedBackAO():
             #------------------ PLOTTING ------------------#
             if plotit & ((k % nframesbetweenplots) == 0):
                 if k == 0:
+                    # NORMALISED diffraction-limited PSF
+                    psf_dl = self.psf_dl(plate_scale_as_px=plate_scale_as_px,psf_ix=psf_ix)
                     axes = []
                     plots = []
                     plt.rc('text', usetex=True)
@@ -406,11 +409,10 @@ class SCFeedBackAO():
                     plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.colorbar(plots[-1],fraction=COLORBAR_FRACTION, pad=COLORBAR_PAD)
-                    ipdb.set_trace()
                 else:
                     # Update the plots
                     plot_wfs.set_data(self.wfs.im)  
-                    fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$' % (k, gains['K_i'], gains['K_leak']))
+                    fig.suptitle(r'AO-corrected phase and science images, $k = %d, K_i = %.2f, K_{leak} = %.2f$; $\mathcal{S} = %.4f$' % (k, gains['K_i'], gains['K_leak'], strehl(psf,psf_dl)))
                     plots[0].set_data(np.angle(self.wavefronts[psf_ix].field)*self.wavefronts[psf_ix].pupil)
                     plots[1].set_data(centre_crop(psf, plot_sz_px))
                 plt.draw()
