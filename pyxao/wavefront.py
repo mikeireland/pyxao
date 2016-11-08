@@ -181,23 +181,30 @@ class Wavefront():
         return_efield = False,
         plotit = False
         ):
-        """ Return an image based on the current field. Note that this routine does NOT modify the field variable. 
+        """ Return an image based on the current field. 
+        Note that this routine does NOT modify the field variable. 
 
         Parameters
         ----------
         return_efield: boolean
             Do we return an electric field? If not, return the intensity.
         N_OS: float
-            How to sample the image. A sampling factor of 1.0 implies Nyquist sampling at this wavefront's wavelength: i.e. the plate scale in the image, f_x = wavelength / 2D (i.e. 2 pixels across the FWHM). A sampling factor of 2.0 implies twice this resolution, etc.
+            How to sample the image. A sampling factor of 1.0 implies Nyquist 
+            sampling at this wavefront's wavelength: i.e. the plate scale in the
+            image, f_x = wavelength / 2D (i.e. 2 pixels across the FWHM). A 
+            sampling factor of 2.0 implies twice this resolution, etc.
         plate_scale_as_px: float
             The plate scale of the final image. 
             Only neither or one of N_OS and plate_scale_as_px must be specified.
 
             TODO: resample the pupil if the fftpad < 1.
-            When fftpad = 1, this corresponds to 1 pixel across the FWHM. This is independent of N.
+            When fftpad = 1, this corresponds to 1 pixel across the FWHM. 
+            This is independent of N.
             """
 
-        # Padding the image to obtain the appropriate plate scale or sampling for the given wavelength.
+        # Padding the image to obtain the appropriate plate scale or sampling 
+        # for the given wavelength.
+        ipdb.set_trace()
         if N_OS and plate_scale_as_px:
             print("ERROR: Nyquist sampling and plate scale cannot both be specified!")
             raise UserWarning
@@ -212,16 +219,20 @@ class Wavefront():
             if N_OS >= 1:
                 fftpad = 2 * N_OS
             else:
-                # If N_OS < 1, then we need to generate the image at a higher resolution and then downsample it. 
+                # If N_OS < 1, then we need to generate the image at a higher 
+                # resolution and then downsample it. 
                 fftpad = 2
     
         # total padded side length 
         N = np.ceil(self.sz * fftpad).astype(np.int)  
 
         # Making sure the result is centred in the image plane.
-        # This code was adapted from similar code in OOMAO (I don't really understand why it works, but it seems to, so no harm = no foul).
+        # This code was adapted from similar code in OOMAO 
+        # (I don't really understand why it works, but it seems to, so no harm 
+        # = no foul).
         if not np.remainder(N, 2) and np.remainder(self.sz, 2):
-            # If N is even but dim is odd, then simply add 1 to N to centre the result.
+            # If N is even but dim is odd, then simply add 1 to N to centre 
+            # the result.
             N += 1
         N = max(N, self.sz)
         
@@ -234,7 +245,8 @@ class Wavefront():
             # If N is even, then we need to add a phase shift.            
             arr = np.arange(self.sz) * (((not np.remainder(self.sz, 2)) - N) / N)
             u, v = np.meshgrid(arr,arr) 
-            fftPhasor = np.ones(self.field.shape, dtype = np.complex) * np.exp( -1j * np.pi * (u + v))        
+            fftPhasor = np.ones(self.field.shape, dtype = np.complex) * \
+                np.exp( -1j * np.pi * (u + v))        
             # Applying the phase shift.
             zpad[:self.sz,:self.sz] *= fftPhasor
 
@@ -262,7 +274,8 @@ class Wavefront():
         # Downsampling if required.
         if N_OS and (N_OS < 1):
             irr = scipy.misc.imresize(irr, N_OS)
-            efield = scipy.misc.imresize(efield.real, N_OS) + 1j*scipy.misc.imresize(efield.imag, N_OS)
+            efield = scipy.misc.imresize(efield.real, N_OS) + \
+            1j*scipy.misc.imresize(efield.imag, N_OS)
 
         if plotit:
             plt.figure()
@@ -293,7 +306,8 @@ class Wavefront():
         self.flatten_field()
 
         # The PSF is then simply the FFT of the pupil.
-        psf = self.image(N_OS = N_OS, plate_scale_as_px = plate_scale_as_px, return_efield = return_efield)
+        psf = self.image(N_OS = N_OS, plate_scale_as_px = plate_scale_as_px, 
+            return_efield = return_efield)
         psf /= sum(psf.flatten())
         if plotit:
             axesScale = [0, self.sz*self.m_per_px, 0, self.sz*self.m_per_px]
