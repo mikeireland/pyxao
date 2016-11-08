@@ -4,7 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import scipy.ndimage as nd
-import ipdb
+try:
+    import ipdb
+except:
+    import pdb
 
 class Atmosphere():
     """A model of the atmosphere, including a fixed phase screen. 

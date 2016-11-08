@@ -4,7 +4,11 @@ import opticstools as ot
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-import ipdb
+try:
+    import ipdb
+except:
+    #The following ling is dodgy, but still enables set_trace()
+    import pdb as ipdb
 import scipy.ndimage as nd
 import scipy.linalg as la
 import matplotlib.cm as cm
@@ -361,6 +365,15 @@ class SCFeedBackAO():
             else:
                 psf_sz_cropped = psf_sz
 
+        #Make plate_scale_as_px for Nyquist sampling of the full size.
+        #See XXX below for a bug.
+        if not plate_scale_as_px:
+            plate_scale_rad_px = self.wavefronts[psf_ix].wave / (self.wavefronts[psf_ix].sz * self.wavefronts[psf_ix].m_per_px)
+            plate_scale_as_px = np.degrees(plate_scale_rad_px) * 3600
+            plate_scale_as_px_in = None
+        else:
+            plate_scale_as_px_in = plate_scale_as_px
+
         # Arrays to hold images
         psfs_cropped = np.zeros((niter, psf_sz_cropped, psf_sz_cropped))# at the psf_ix wavelength
 
@@ -400,8 +413,9 @@ class SCFeedBackAO():
 
             #-------------------- SAVING PSF ----------------------# 
             # Create the PSF            
-            psf = self.wavefronts[psf_ix].image(plate_scale_as_px = plate_scale_as_px) 
-            psf /= sum(psf.flatten())             
+            # NB if the following line has non-none, then we have a uint 8 error XXX
+            psf = self.wavefronts[psf_ix].image(plate_scale_as_px = plate_scale_as_px_in) 
+            psf /= np.sum(psf.flatten())             
             psfs_cropped[k] = centre_crop(psf, psf_sz_cropped) 
                    
             #------------------ PLOTTING ------------------#
@@ -439,6 +453,7 @@ class SCFeedBackAO():
                 plt.draw()
                 plt.pause(0.00001)  # Need this to plot on some machines.
                         
-        return psfs_cropped   
+        return psfs_cropped
+
 
         
