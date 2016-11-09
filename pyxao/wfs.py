@@ -89,7 +89,7 @@ class ShackHartmann(WFS):
         l_px_m = self.wavefronts[0].D / detector_sz # pixel size in metres
         plate_scale_as_m = plate_scale_as_px / l_px_m # units!
         self.flength_m = 3600 * 180 / np.pi / plate_scale_as_m / nlenslets_per_side # XXXX Experimental
-        
+    
         # NOTE: Here, we use the wavefront resolution instead of the detector 
         # resolution. We image at the detector resolution, but do all of the 
         # wave calculations etc. at the wavefront resolution.
@@ -248,10 +248,20 @@ class ShackHartmann(WFS):
             
             # Multiply the field by the pupil mask & propagate.
             self.wavefronts[i].field = self.wavefronts[i].field*self.pupils[i]
-            self.wavefronts[i].propagate(self.propagator_ixs[i])
+            # self.wavefronts[i].propagate(self.propagator_ixs[i],N_OS=2)
+            # self.wavefronts[i].propagate(self.propagator_ixs[i], plate_scale_as_px=self.plate_scale_as_px)            
+            self.wavefronts[i].propagate(self.propagator_ixs[i])            
+            self.im += self.weights[i] * centre_crop(np.abs(self.wavefronts[i].field)**2, self.detector_sz)
+            
+            plt.figure()
+            plt.subplot(121); plt.imshow(self.im)
+            plt.subplot(122); plt.imshow(np.abs(self.wavefronts[i].field)**2)
+            plt.show()
 
-            # Add the image component of that wavelength to the final image.
-            self.im += self.weights[i] * centre_crop(self.wavefronts[i].image(plate_scale_as_px = self.plate_scale_as_px), self.detector_sz)
+            # What about the detector size? 
+            # Check that the sampling is correct before going any further
+            # Then, how can we translate detector size, focal length, etc. into 
+            # the plate scale?
 
            # Restore the field.
             if restore_field:
