@@ -78,7 +78,9 @@ class Wavefront():
             pupil demagnification"""
         self.propagators.append(ot.FresnelPropagator(self.sz,self.m_per_px,distance*demag**2, self.wave))
         
-    def propagate(self, index):
+    def propagate(self, index,
+        N_OS=None,
+        plate_scale_as_px=None):
         """Propagate the wavefront, modifying the field appropriately.
         
         Parameters
@@ -89,7 +91,11 @@ class Wavefront():
         if len(self.propagators) <= index:
             print("ERRROR: index out of range")
             raise UserWarning
-        self.field = self.propagators[index].propagate(self.field)
+        self.field = self.propagators[index].propagate(
+            return_efield=True,
+            wf=self.field, 
+            N_OS=N_OS, 
+            plate_scale_as_px=plate_scale_as_px)
         
     def add_atmosphere(self,atm):
         """Add atmosphere propagators to this wavefront.
@@ -181,7 +187,11 @@ class Wavefront():
         return_efield = False,
         plotit = False
         ):
-        """ Return an image based on the current field. Note that this routine does NOT modify the field variable. 
+        """ 
+        Return an image based on the current field using the far-field 
+        approximation.
+
+        Note that this routine does NOT modify the field variable. 
 
         Parameters
         ----------
