@@ -27,8 +27,8 @@ def strehl(psf, psf_dl):
 	
 def centre_crop(psf, psf_sz_cropped):
     """Crop an image about the center"""
-    return psf[psf.shape[0]/2-psf_sz_cropped//2:psf.shape[0]/2-psf_sz_cropped//2+psf_sz_cropped + np.mod(psf_sz_cropped,2),
-               psf.shape[1]/2-psf_sz_cropped//2:psf.shape[1]/2-psf_sz_cropped//2+psf_sz_cropped + np.mod(psf_sz_cropped,2)] 
+    return psf[psf.shape[0]/2-psf_sz_cropped//2:psf.shape[0]/2-psf_sz_cropped//2+psf_sz_cropped,
+               psf.shape[1]/2-psf_sz_cropped//2:psf.shape[1]/2-psf_sz_cropped//2+psf_sz_cropped] 
 	
 class SCFeedBackAO():
     """A single-congugate adaptive optics system. The initialization order should be:
@@ -191,7 +191,6 @@ class SCFeedBackAO():
                 #Check that poking in both directions is equivalent!
                 if (np.sum(wfs_plus*wfs_minus)/np.sum(wfs_plus*wfs_plus) > -0.9):
                     print("WARNING: Poking the DM is assymetric!!!")
-                    # ipdb.set_trace()
 
                 # Taking the mean response value.
                 self.response_matrix[i] = 0.5*(wfs_plus - wfs_minus).flatten()
@@ -415,7 +414,7 @@ class SCFeedBackAO():
             # Create the PSF            
             # NB if the following line has non-none, then we have a uint 8 error XXX
             psf = self.wavefronts[psf_ix].image(plate_scale_as_px = plate_scale_as_px_in) 
-            psf /= np.sum(psf.flatten())             
+            psf /= np.sum(psf.flatten())
             psfs_cropped[k] = centre_crop(psf, psf_sz_cropped) 
                    
             #------------------ PLOTTING ------------------#
@@ -443,7 +442,6 @@ class SCFeedBackAO():
                     plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%.2f\"'))
                     plt.colorbar(plots[-1],fraction=COLORBAR_FRACTION, pad=COLORBAR_PAD)
-                    ipdb.set_trace()
                 else:
                     # Update the plots
                     plot_wfs.set_data(self.wfs.im)  
