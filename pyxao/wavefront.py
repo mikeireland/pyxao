@@ -13,10 +13,10 @@ try:
     pyfftw.interfaces.cache.enable()
     pyfftw.interfaces.cache.set_keepalive_time(1.0)
     nthreads = 16 
-    print("WARNING: using pyfftw with {:d} threads...".format(nthreads))
+    print("WARNING: in wavefront.py I am using pyfftw with {:d} threads...".format(nthreads))
 except:
     nthreads = 0
-    print("WARNING: I could not import pyfftw, so I am using numpy fft routines instead...")
+    print("WARNING: in wavefront.py I could not import pyfftw, so I am using numpy fft routines instead...")
 
 
 class Wavefront():
