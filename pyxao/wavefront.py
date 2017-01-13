@@ -4,10 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
 import scipy.misc
-try:
-    import ipdb
-except:
-    import pdb
+import ipdb
 import time
 plt.ion()
 
@@ -206,7 +203,6 @@ class Wavefront():
 
         # Padding the image to obtain the appropriate plate scale or sampling 
         # for the given wavelength.
-        ipdb.set_trace()
         if N_OS and plate_scale_as_px:
             print("ERROR: Nyquist sampling and plate scale cannot both be specified!")
             raise UserWarning
@@ -272,9 +268,8 @@ class Wavefront():
 
         irr = np.abs(efield)**2 # Irradiance
 
-
         # Downsampling if required.
-        if N_OS and (N_OS < 1):
+        if N_OS and (fftpad < 1):
             irr = scipy.misc.imresize(irr, N_OS)
             efield = scipy.misc.imresize(efield.real, N_OS) + \
             1j*scipy.misc.imresize(efield.imag, N_OS)
